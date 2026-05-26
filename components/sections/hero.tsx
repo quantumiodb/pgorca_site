@@ -6,11 +6,11 @@ import { useEffect, useState } from "react";
 import { site } from "@/lib/site";
 
 const highlights = [
-  { value: "156×", label: "TPC-DS Q41 (sf=5) vs PostgreSQL 18" },
-  { value: "20.7×", label: "TPC-H Q17 — correlated aggregate" },
-  { value: "9.0×", label: "TPC-DS Q25 — 6-way join" },
-  { value: "7.3×", label: "TPC-DS Q21 / Q17 — correlated min/max" },
-  { value: "5.8×", label: "TPC-DS Q31 — multi-CTE self-join" },
+  { value: "≥254×", label: "TPC-DS Q1 — ORCA 0.5 s vs PG timeout (120 s)" },
+  { value: "107×", label: "TPC-DS Q30 — correlated aggregate" },
+  { value: "77×", label: "TPC-DS Q81 — correlated subquery" },
+  { value: "37×", label: "TPC-DS Q41 — correlated IN + EXISTS" },
+  { value: "21×", label: "TPC-H Q17 — l_quantity < 0.2 × AVG (correlated)" },
 ];
 
 export function Hero() {

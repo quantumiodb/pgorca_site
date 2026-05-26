@@ -1,4 +1,4 @@
-import { AlertTriangle, GitBranch, Layers } from "lucide-react";
+import { GitBranch, Layers, LayoutGrid } from "lucide-react";
 
 const items = [
   {
@@ -30,17 +30,16 @@ WHERE p_partkey = l_partkey
   );`,
   },
   {
-    icon: AlertTriangle,
-    title: "Stats lost across CTEs / GROUP BY",
-    body: "PostgreSQL's planner loses NDV / histogram information across GROUP BY and CTE boundaries. The downstream join estimate falls back to defaults — and a single bad cardinality can pick a plan that runs for hours.",
-    snippet: `-- TPC-DS Q31 / Q39 pattern
-WITH ss AS (
-  SELECT d_qoy, SUM(ss_ext_sales_price) s
-  FROM store_sales JOIN date_dim ON ...
-  GROUP BY d_qoy            -- stats dropped here in PG
-)
-SELECT * FROM ss s1 JOIN ss s2 ON ...
-  JOIN ss s3 ON ...;        -- self-join cardinality way off`,
+    icon: LayoutGrid,
+    title: "Partition pruning happens too late",
+    body: "PostgreSQL prunes partitions from constant predicates at plan time, but join-key pruning depends on runtime values the planner can't see. ORCA's DynamicTableScan + PartitionSelector decides which partitions to read after the join key is known — pruning that PG simply does not perform.",
+    snippet: `-- Star-join: prune sales partitions by date_dim.d_year = 2002
+-- PG: scans every sales partition, joins, filters after
+-- ORCA: PartitionSelector pushes the year filter to the scan
+SELECT SUM(ss_ext_sales_price)
+FROM store_sales            -- partitioned by ss_sold_date_sk
+JOIN date_dim ON ss_sold_date_sk = d_date_sk
+WHERE d_year = 2002;        -- prunes ~95% of partitions at runtime`,
   },
 ];
 
