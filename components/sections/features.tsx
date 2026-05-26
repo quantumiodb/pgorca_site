@@ -53,7 +53,9 @@ export function Features() {
       <div className="container-narrow">
         <div className="mx-auto max-w-2xl text-center">
           <div className="h-eyebrow">Features</div>
-          <h2 className="mt-3 h-section">What ORCA does that the PG planner doesn&apos;t.</h2>
+          <h2 className="mt-3 h-section">
+            Optimizer features ORCA brings to PostgreSQL.
+          </h2>
           <p className="mt-4 text-lg text-muted">
             Four structural plan-shape capabilities — not micro-optimizations.
           </p>

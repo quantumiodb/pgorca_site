@@ -32,7 +32,9 @@ export function BenchmarksClient({ workloads }: Props) {
         <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
           <div className="max-w-xl">
             <div className="h-eyebrow">Benchmarks</div>
-            <h2 className="mt-3 h-section">Real workloads. Real numbers.</h2>
+            <h2 className="mt-3 h-section">
+              TPC-H and TPC-DS benchmarks: pg_orca vs PostgreSQL 18.
+            </h2>
             <p className="mt-4 text-lg text-muted">
               ORCA&apos;s wins cluster on complex queries with correlated subqueries,
               multi-CTE joins, and 6+ way roll-ups — the cases PostgreSQL&apos;s planner

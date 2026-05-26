@@ -25,7 +25,9 @@ export function Architecture() {
       <div className="container-narrow">
         <div className="mx-auto max-w-2xl text-center">
           <div className="h-eyebrow">Architecture</div>
-          <h2 className="mt-3 h-section">How a query becomes a plan.</h2>
+          <h2 className="mt-3 h-section">
+            Architecture: how pg_orca turns a query into a plan.
+          </h2>
           <p className="mt-4 text-lg text-muted">
             pg_orca registers a <code className="rounded bg-ink-100 px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-ink-800">planner_hook</code>.
             When ORCA is enabled, the query takes a detour through DXL — and comes back as
@@ -60,7 +62,7 @@ function FlowDiagram() {
       viewBox="0 0 960 280"
       className="w-full h-auto"
       role="img"
-      aria-label="pg_orca query flow"
+      aria-label="pg_orca query flow diagram: PostgreSQL Query AST passes through the planner_hook into pg_orca, which translates to DXL, runs the ORCA optimizer with Memo, transformation rules and statistics, and emits a DXL plan that is translated back into a PostgreSQL PlannedStmt for the executor. On failure it falls back to standard_planner."
     >
       <defs>
         <linearGradient id="grad-brand" x1="0" y1="0" x2="1" y2="0">

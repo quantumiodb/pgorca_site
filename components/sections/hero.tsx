@@ -51,9 +51,11 @@ export function Hero() {
           </h1>
 
           <p className="mt-6 max-w-xl text-lg leading-relaxed text-muted">
-            A cost-based query optimizer with exhaustive join enumeration, correlated
-            subquery decorrelation, and robust statistics propagation — packaged as a
-            single <code className="rounded bg-ink-100 px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-ink-800">CREATE EXTENSION</code>.
+            <strong>pg_orca</strong> is a PostgreSQL 18 extension that swaps in the
+            ORCA cost-based query optimizer from Greenplum / Apache Cloudberry —
+            exhaustive join enumeration, correlated subquery decorrelation, and
+            dynamic partition pruning. Installed with a single{" "}
+            <code className="rounded bg-ink-100 px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-ink-800">CREATE EXTENSION</code>.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center gap-3">

@@ -46,7 +46,9 @@ export function Faq() {
       <div className="container-narrow">
         <div className="mx-auto max-w-2xl text-center">
           <div className="h-eyebrow">FAQ</div>
-          <h2 className="mt-3 h-section">Questions, mostly answered.</h2>
+          <h2 className="mt-3 h-section">
+            pg_orca FAQ — install, compatibility, license.
+          </h2>
         </div>
 
         <div className="mx-auto mt-12 max-w-3xl divide-y divide-ink-200/60 overflow-hidden rounded-2xl border border-ink-200/70 bg-white dark:divide-ink-800 dark:border-ink-800 dark:bg-ink-900/40">

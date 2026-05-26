@@ -50,7 +50,7 @@ export function Why() {
         <div className="mx-auto max-w-2xl text-center">
           <div className="h-eyebrow">Why pg_orca</div>
           <h2 className="mt-3 h-section">
-            Three things the PostgreSQL planner does not do well.
+            Three limits of the PostgreSQL query planner.
           </h2>
           <p className="mt-4 text-lg text-muted">
             ORCA was built at Greenplum for exactly this class of problem. pg_orca brings

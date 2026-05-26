@@ -1,55 +1,79 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, JetBrains_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Nav } from "@/components/nav";
 import { Footer } from "@/components/footer";
+import { JsonLd } from "@/components/json-ld";
 import { site } from "@/lib/site";
 import "./globals.css";
 
 const geist = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
+  display: "swap",
 });
 
 const jetbrainsMono = JetBrains_Mono({
   variable: "--font-jetbrains-mono",
   subsets: ["latin"],
+  display: "swap",
 });
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f6f7f9" },
+    { media: "(prefers-color-scheme: dark)", color: "#080a1a" },
+  ],
+  width: "device-width",
+  initialScale: 1,
+};
 
 export const metadata: Metadata = {
   metadataBase: new URL(site.url),
   title: {
-    default: `${site.name} — ${site.tagline}`,
+    default: site.title,
     template: `%s · ${site.name}`,
   },
   description: site.description,
-  keywords: [
-    "PostgreSQL",
-    "ORCA",
-    "query optimizer",
-    "Greenplum",
-    "Cloudberry",
-    "TPC-H",
-    "TPC-DS",
-    "extension",
-    "pg18",
-  ],
-  authors: [{ name: "pg_orca contributors" }],
+  keywords: site.keywords,
+  authors: [{ name: "pg_orca contributors", url: site.github }],
+  creator: "pg_orca contributors",
+  publisher: "QuantumIO",
+  applicationName: site.name,
+  category: "technology",
+  alternates: {
+    canonical: site.url,
+  },
   openGraph: {
     type: "website",
     url: site.url,
-    title: `${site.name} — ${site.tagline}`,
+    title: site.title,
     description: site.description,
     siteName: site.name,
+    locale: "en_US",
   },
   twitter: {
     card: "summary_large_image",
-    title: `${site.name} — ${site.tagline}`,
+    title: site.title,
     description: site.description,
+    creator: "@quantumiodb",
   },
   robots: {
     index: true,
     follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-snippet": -1,
+      "max-image-preview": "large",
+      "max-video-preview": -1,
+    },
+  },
+  icons: {
+    icon: "/favicon.ico",
+  },
+  other: {
+    "google-site-verification": "", // fill in after Search Console verifies
   },
 };
 
@@ -64,6 +88,7 @@ export default function RootLayout({
           <main>{children}</main>
           <Footer />
         </ThemeProvider>
+        <JsonLd />
       </body>
     </html>
   );
