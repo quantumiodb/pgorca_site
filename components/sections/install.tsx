@@ -21,15 +21,36 @@ cmake .. -DPG_CONFIG=$(which pg_config) -DCMAKE_BUILD_TYPE=Release -GNinja
 ninja -j$(nproc)
 ninja install`;
 
-const enableSteps = `-- 3. Load extension (once per database)
+const enableSteps = `-- 3. Install the extension in the target database.
+--    CREATE EXTENSION loads the library into the current session,
+--    so pg_orca.* GUCs and planner_hook are live immediately.
 CREATE EXTENSION pg_orca;
 
--- 4. Enable for current session
-LOAD 'pg_orca';
+-- 4. (Recommended) Auto-load pg_orca for every new connection
+--    to this database. Per-database scope, no server restart;
+--    takes effect for sessions opened from this point on.
+ALTER DATABASE mydb SET session_preload_libraries = 'pg_orca';
+
+-- 5. Enable ORCA — per session, or persistently with
+--    ALTER DATABASE mydb SET pg_orca.enable_orca = on
 SET pg_orca.enable_orca = on;
 
--- 5. Run a query — ORCA will optimize it
+-- 6. Run a query — ORCA optimizes it.
 EXPLAIN SELECT * FROM lineitem WHERE l_quantity < 5;`;
+
+const scopeSteps = `-- Cluster-wide (every database, every role):
+ALTER SYSTEM SET session_preload_libraries = 'pg_orca';
+SELECT pg_reload_conf();
+
+-- Single role only:
+ALTER ROLE bench SET session_preload_libraries = 'pg_orca';
+
+-- Co-exist with sibling preload libraries — list them explicitly:
+ALTER DATABASE mydb SET session_preload_libraries = 'pg_orca,pg_stat_statements';
+
+-- Roll back:
+ALTER DATABASE mydb RESET session_preload_libraries;
+DROP EXTENSION pg_orca;`;
 
 export function Install() {
   const [os, setOs] = useState<Os>("macos");
@@ -39,7 +60,7 @@ export function Install() {
       <div className="container-narrow">
         <div className="mx-auto max-w-2xl text-center">
           <div className="h-eyebrow">Install</div>
-          <h2 className="mt-3 h-section">Five steps to ORCA on your PostgreSQL.</h2>
+          <h2 className="mt-3 h-section">Three steps to ORCA on your PostgreSQL.</h2>
           <p className="mt-4 text-lg text-muted">
             Requires PostgreSQL 18, xerces-c, CMake ≥ 3.20, and a C++17 compiler. No
             patches to PostgreSQL itself.
@@ -62,23 +83,36 @@ export function Install() {
           </Step>
 
           {/* Step 3 */}
-          <Step n={3} title="Load, enable, run">
+          <Step n={3} title="Install, preload, enable, run">
             <CodeBlock code={enableSteps} language="sql" filename="psql" />
           </Step>
         </div>
 
         <div className="mt-10 rounded-2xl border border-brand-300/40 bg-brand-50/40 p-6 text-sm dark:border-brand-800/40 dark:bg-brand-950/30">
           <p className="font-mono text-xs uppercase tracking-[0.15em] text-brand-700 dark:text-brand-300">
-            Tip · shared_preload_libraries
+            Why session_preload_libraries, not shared_preload_libraries
           </p>
           <p className="mt-2 text-ink-800 dark:text-ink-200">
-            For server-wide availability, add{" "}
             <code className="rounded bg-ink-100 px-1.5 py-0.5 font-mono dark:bg-ink-800">
-              shared_preload_libraries = &apos;pg_orca&apos;
+              session_preload_libraries
             </code>{" "}
-            to <code className="rounded bg-ink-100 px-1.5 py-0.5 font-mono dark:bg-ink-800">postgresql.conf</code> and restart.
-            Then individual sessions only need <code className="rounded bg-ink-100 px-1.5 py-0.5 font-mono dark:bg-ink-800">SET pg_orca.enable_orca = on</code>.
+            loads pg_orca into each new backend at connection time — no postmaster
+            restart, scoped to one database (or one role), and easily reverted with{" "}
+            <code className="rounded bg-ink-100 px-1.5 py-0.5 font-mono dark:bg-ink-800">
+              RESET
+            </code>
+            . Existing sessions stay on the standard planner until they reconnect.
           </p>
+        </div>
+
+        <div className="mt-6 rounded-2xl border border-ink-200/70 bg-white p-6 dark:border-ink-800 dark:bg-ink-900/40">
+          <p className="font-mono text-xs uppercase tracking-[0.15em] text-ink-500 dark:text-ink-400">
+            Alternative scopes
+          </p>
+          <p className="mt-2 mb-4 text-sm text-muted">
+            Pick the scope that matches how broadly you want pg_orca enabled.
+          </p>
+          <CodeBlock code={scopeSteps} language="sql" filename="psql" />
         </div>
       </div>
     </section>

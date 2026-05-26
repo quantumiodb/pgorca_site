@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Plus } from "lucide-react";
+import { Github, Mail, Plus } from "lucide-react";
+import { site } from "@/lib/site";
 import { cn } from "@/lib/utils";
 
 const faqs = [
   {
     q: "Does pg_orca replace PostgreSQL's planner?",
-    a: "No. It registers a planner_hook and is opt-in per session via SET pg_orca.enable_orca = on. When disabled, PostgreSQL behaves exactly as it would without the extension loaded.",
+    a: "No. It registers a planner_hook and is opt-in via SET pg_orca.enable_orca = on — either per session, or persistently with ALTER DATABASE mydb SET pg_orca.enable_orca = on. When disabled, PostgreSQL behaves exactly as it would without the extension loaded.",
   },
   {
     q: "Will it break my existing queries?",
@@ -52,6 +53,39 @@ export function Faq() {
           {faqs.map((f, i) => (
             <FaqItem key={f.q} q={f.q} a={f.a} initiallyOpen={i === 0} />
           ))}
+        </div>
+
+        <div className="mx-auto mt-12 max-w-3xl overflow-hidden rounded-2xl border border-ink-200/70 bg-gradient-to-br from-white to-brand-50/40 p-8 dark:border-ink-800 dark:from-ink-900 dark:to-brand-950/30">
+          <div className="flex flex-col items-start justify-between gap-6 sm:flex-row sm:items-center">
+            <div>
+              <div className="h-eyebrow">Get in touch</div>
+              <h3 className="mt-3 text-xl font-semibold">
+                Questions, integration help, or commercial support?
+              </h3>
+              <p className="mt-2 text-sm text-muted">
+                Reach the team for benchmark questions, deployment advice, or to discuss
+                using pg_orca in your stack.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 sm:items-end">
+              <a
+                href={`mailto:${site.email}`}
+                className="inline-flex items-center gap-2 rounded-md bg-ink-900 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-ink-800 dark:bg-white dark:text-ink-900 dark:hover:bg-ink-100"
+              >
+                <Mail className="size-4" />
+                {site.email}
+              </a>
+              <a
+                href={site.github}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-xs text-muted transition hover:text-brand-600 dark:hover:text-brand-400"
+              >
+                <Github className="size-3.5" />
+                Or open a GitHub issue
+              </a>
+            </div>
+          </div>
         </div>
       </div>
     </section>

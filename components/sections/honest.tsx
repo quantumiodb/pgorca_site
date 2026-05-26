@@ -1,20 +1,17 @@
-import { AlertCircle, ShieldCheck } from "lucide-react";
+import { Cpu, Gauge, ShieldCheck } from "lucide-react";
 
 const limits = [
   {
+    icon: Gauge,
     title: "Planning overhead is high",
     metric: "13.7 ms vs 0.25 ms",
     body: "ORCA's CBO is consistently heavier than PG's planner. On a 1-row point lookup, planning alone takes ~14 ms — where PG finishes in under 1 ms. For OLTP / latency-sensitive paths, planning dominates total wall time.",
   },
   {
-    title: "Alpha stage",
-    metric: "Not for production",
-    body: "Benchmark workloads (TPC-H, TPC-DS) are stable. Mixed real-world workloads have not been extensively validated. Use in development, evaluation, and analytical exploration — not on critical paths.",
-  },
-  {
-    title: "Mitigations in progress",
-    metric: "Plan cache · fast-path",
-    body: "A shape-keyed DXL plan cache (invalidated on stat/DDL changes) and a heuristic fast-path bypass for trivial queries are on the roadmap. Both would substantially close the OLTP gap.",
+    icon: Cpu,
+    title: "No parallel query yet",
+    metric: "Single-worker plans only",
+    body: "ORCA generates serial plans — Gather / Parallel Seq Scan / Parallel Hash Join nodes are not emitted. Benchmarks are run with max_parallel_workers_per_gather = 0 for an apples-to-apples comparison. On hardware where PG benefits from parallelism, ORCA's serial plan can lose on wall time even when its plan shape is structurally better.",
   },
 ];
 
@@ -29,25 +26,32 @@ export function Honest() {
           </h2>
           <p className="mt-4 text-lg text-muted">
             Optimizer quality cuts both ways. The same exhaustive search that produces
-            156× wins on complex analytics costs measurable planning time on simple
-            queries.
+            254× wins on complex analytics costs measurable planning time on simple
+            queries — and ORCA hasn&apos;t learned PG&apos;s parallel executor yet.
           </p>
         </div>
 
-        <div className="mt-12 grid gap-5 md:grid-cols-3">
-          {limits.map((l) => (
-            <div
-              key={l.title}
-              className="rounded-2xl border border-ink-200/70 bg-white p-6 dark:border-ink-800 dark:bg-ink-900/40"
-            >
-              <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400">
-                <AlertCircle className="size-4" />
-                <span className="font-mono text-xs uppercase tracking-[0.15em]">{l.metric}</span>
+        <div className="mt-12 grid gap-5 md:grid-cols-2">
+          {limits.map((l) => {
+            const Icon = l.icon;
+            return (
+              <div
+                key={l.title}
+                className="rounded-2xl border border-ink-200/70 bg-white p-6 dark:border-ink-800 dark:bg-ink-900/40"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400">
+                    <Icon className="size-4" />
+                    <span className="font-mono text-xs uppercase tracking-[0.15em]">
+                      {l.metric}
+                    </span>
+                  </div>
+                </div>
+                <h3 className="mt-3 text-lg font-semibold">{l.title}</h3>
+                <p className="mt-3 text-sm leading-relaxed text-muted">{l.body}</p>
               </div>
-              <h3 className="mt-3 text-lg font-semibold">{l.title}</h3>
-              <p className="mt-3 text-sm leading-relaxed text-muted">{l.body}</p>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         <div className="mx-auto mt-10 flex max-w-3xl items-start gap-4 rounded-2xl border border-emerald-300/50 bg-emerald-50/60 p-6 dark:border-emerald-800/40 dark:bg-emerald-950/30">

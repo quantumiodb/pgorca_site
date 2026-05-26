@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Mail } from "lucide-react";
 import { site } from "@/lib/site";
 
 const cols = [
@@ -19,10 +20,13 @@ const cols = [
     ],
   },
   {
-    title: "Resources",
+    title: "Contact",
     links: [
-      { href: "https://cloudberry.apache.org", label: "Apache Cloudberry" },
-      { href: "https://www.postgresql.org/", label: "PostgreSQL" },
+      { href: `mailto:${site.email}`, label: site.email },
+      {
+        href: "https://cloudberry.apache.org",
+        label: "Apache Cloudberry",
+      },
       {
         href: "https://15721.courses.cs.cmu.edu/spring2019/papers/22-optimizer1/p337-soliman.pdf",
         label: "ORCA Paper (SIGMOD '14)",
@@ -44,6 +48,13 @@ export function Footer() {
               <span>pg_orca</span>
             </Link>
             <p className="mt-3 text-sm text-muted">{site.tagline}</p>
+            <a
+              href={`mailto:${site.email}`}
+              className="mt-4 inline-flex items-center gap-2 rounded-md border border-ink-200 bg-white px-3 py-1.5 text-xs font-mono text-ink-700 transition hover:border-brand-300 hover:text-brand-600 dark:border-ink-800 dark:bg-ink-900 dark:text-ink-200 dark:hover:border-brand-700 dark:hover:text-brand-400"
+            >
+              <Mail className="size-3.5" />
+              {site.email}
+            </a>
           </div>
           {cols.map((c) => (
             <div key={c.title}>
