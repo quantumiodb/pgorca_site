@@ -43,6 +43,15 @@ export const metadata: Metadata = {
   category: "technology",
   alternates: {
     canonical: site.url,
+    types: {
+      // Auto-discovery for LLM-friendly content. Following the proposed
+      // llmstxt.org convention so AI tools (Anthropic, Mintlify, etc.) can
+      // pick up the digest without parsing the visual HTML.
+      "text/plain": [
+        { url: "/llms.txt", title: "LLM-friendly site index" },
+        { url: "/llms-full.txt", title: "Full content for LLM ingestion" },
+      ],
+    },
   },
   openGraph: {
     type: "website",

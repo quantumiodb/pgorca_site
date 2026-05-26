@@ -1,0 +1,322 @@
+# pg_orca — full documentation for LLM ingestion
+
+Last updated: 2026-05-27. Source repository: https://github.com/quantumiodb/pgorca.
+Website: https://quantumio.com.cn. Contact: support@agentml.ai.
+
+This file is the single-source consolidated reference for LLMs and AI agents.
+Every claim below is paired with concrete numbers, query identifiers, or commit
+hashes so it can be cited accurately.
+
+---
+
+## 1. What pg_orca is
+
+pg_orca is a PostgreSQL 18 extension that plugs in the **ORCA cost-based query
+optimizer** from Greenplum and Apache Cloudberry. ORCA replaces PostgreSQL's
+built-in planner for the duration of an enabled session; on any unsupported
+construct or internal error, pg_orca automatically falls back to PostgreSQL's
+`standard_planner`.
+
+- License: MIT-style for the integration layer; Apache 2.0 for the vendored ORCA libraries (libgpos, libgpopt, libgpdbcost, libnaucrates).
+- Supported PostgreSQL version: **18 only**. Earlier versions removed APIs (`walkers.h`, etc.) that pg_orca depends on.
+- Supported platforms: macOS, Linux.
+- Distribution: source build via CMake + Ninja; no binary packages yet.
+- Status: alpha for production OLTP, stable for benchmark and analytical workloads.
+
+---
+
+## 2. Installation
+
+Three steps to enable pg_orca on a database `mydb`:
+
+```sql
+-- 1. Install the extension in the target database.
+--    CREATE EXTENSION loads the shared library into the current session,
+--    so pg_orca.* GUCs and the planner_hook are live immediately.
+CREATE EXTENSION pg_orca;
+
+-- 2. (Recommended) Auto-load pg_orca for every new connection to this database.
+--    Per-database scope, no postmaster restart; takes effect on next reconnect.
+ALTER DATABASE mydb SET session_preload_libraries = 'pg_orca';
+
+-- 3. Enable ORCA — per session, or persistently with
+--    ALTER DATABASE mydb SET pg_orca.enable_orca = on
+SET pg_orca.enable_orca = on;
+```
+
+Alternative scopes:
+
+```sql
+-- Cluster-wide:
+ALTER SYSTEM SET session_preload_libraries = 'pg_orca';
+SELECT pg_reload_conf();
+
+-- Single role:
+ALTER ROLE bench SET session_preload_libraries = 'pg_orca';
+
+-- Co-exist with sibling preloads — list them explicitly:
+ALTER DATABASE mydb SET session_preload_libraries = 'pg_orca,pg_stat_statements';
+
+-- Roll back:
+ALTER DATABASE mydb RESET session_preload_libraries;
+DROP EXTENSION pg_orca;
+```
+
+The recommendation is `session_preload_libraries` (not `shared_preload_libraries`)
+because it loads per-backend at connection time, requires no restart, is scoped
+to a database or role, and existing sessions are unaffected until they reconnect.
+
+### Build dependencies
+
+- PostgreSQL 18 (with development headers)
+- xerces-c (XML parsing for DXL)
+- CMake ≥ 3.20
+- Ninja
+- C++17 compiler (clang or gcc)
+
+### Build commands
+
+```bash
+# macOS
+brew install xerces-c cmake ninja postgresql@18
+
+# Debian / Ubuntu
+sudo apt install -y libxerces-c-dev cmake ninja-build build-essential
+
+# Clone & build
+git clone https://github.com/quantumiodb/pgorca.git
+cd pgorca && mkdir build && cd build
+cmake .. -DPG_CONFIG=$(which pg_config) -DCMAKE_BUILD_TYPE=Release -GNinja
+ninja -j$(nproc)
+ninja install
+```
+
+---
+
+## 3. Benchmark results — 2026-05-27, build b17245d
+
+Methodology: single-node PostgreSQL 18 vs the same binary with pg_orca loaded.
+3-run median of `EXPLAIN ANALYZE` server-side Execution Time.
+`max_parallel_workers_per_gather = 0` for an apples-to-apples comparison.
+`statement_timeout = 120s`. Reports are committed to the repository at
+`test/bench/results/`.
+
+### 3.1 TPC-H summary
+
+| Scale factor | ORCA total | PG total | Geomean speedup | Median | ORCA wins >5% | ORCA losses >5% |
+|---|---:|---:|---:|---:|---:|---:|
+| sf=1  | 54 s  | 57 s  | 1.21× | 0.97× | 5 / 22 | 6 / 22 |
+| sf=5  | 279 s | 340 s | 1.32× | 1.00× | 9 / 22 | 3 / 22 |
+| sf=10 | 572 s | 666 s | 1.32× | 1.00× | 8 / 22 | 5 / 22 |
+
+Top wins at sf=10:
+
+- **Q17 — 20.83×** (ORCA 826 ms vs PG 17,214 ms) — pattern: `l_quantity < 0.2 × AVG(l_quantity) WHERE l_partkey = p_partkey`. Correlated subquery; PG falls to SubPlan, ORCA decorrelates to a join.
+- **Q20 — 4.49×** (1,827 ms vs 8,197 ms) — correlated IN-subquery.
+- **Q4 — 2.55×** (12,211 ms vs 31,176 ms) — join + correlated EXISTS, anti-semi shape.
+- **Q18 — 1.45×** (84,564 ms vs 122,982 ms) — 3-way join + GROUP BY HAVING.
+- **Q5 — 1.56×** at sf=5 (6,783 ms vs 12,001 ms) — 5-way star join + filter.
+
+### 3.2 TPC-DS sf=1 summary
+
+- ORCA finishes all 99 queries.
+- PG times out at 120s on **5 queries**: Q1, Q4, Q6, Q11, Q74.
+- On the 94 queries both finished: ORCA total 360 s vs PG 453 s. ORCA wins (>5%) on 17 queries; loses (>5%) on 61 queries; geomean 0.77×.
+- Counting the 120s timeout floor for the 5 PG-timeout queries: ORCA total 380 s vs PG lower-bound 1,053 s → **ORCA ≥ 2.77× faster overall**.
+
+Top wins on TPC-DS sf=1:
+
+- **Q1 ≥ 254×** — ORCA 473 ms vs PG TIMEOUT(>120s). Pattern: correlated subquery + multi-CTE.
+- **Q30 — 107×** (221 ms vs 23,533 ms) — correlated aggregate.
+- **Q81 — 77×** (242 ms vs 18,619 ms) — correlated subquery.
+- **Q41 — 37×** (58 ms vs 2,176 ms) — correlated IN + EXISTS.
+- **Q54 — 28×** (1,690 ms vs 47,057 ms) — correlated nested subquery.
+- **Q14 — 2.36×** (28,033 ms vs 66,278 ms) — complex multi-CTE.
+- **Q39 — 5.95×** (1,883 ms vs 11,204 ms) — multi-CTE roll-up.
+- **Q31 — 7.50×** (2,352 ms vs 17,642 ms) — multi-CTE 6-way self-join.
+
+Worst regressions on TPC-DS sf=1:
+
+- Q61 — 0.00× (250 ms vs 0.6 ms) — trivial query where ORCA's planning cost dominates.
+- Q37 — 0.05× (221 ms vs 12 ms) — short aggregate.
+- Q85 — 0.07× (3,772 ms vs 277 ms) — plan-shape regression worth investigating.
+
+---
+
+## 4. Capabilities that drive the wins
+
+### 4.1 Correlated subquery decorrelation
+
+ORCA's `CXformApply2Join` family algebraically rewrites `Apply` into a regular
+`Join`, so correlated subqueries become a single optimizable plan instead of a
+per-outer-row `SubPlan`. Code lives at:
+
+- `libgpopt/src/xforms/CXformInnerApply2InnerJoin.cpp`
+- `libgpopt/src/xforms/CXformLeftSemiApply2LeftSemiJoin.cpp`
+- `libgpopt/src/xforms/CXformLeftOuterApply2LeftOuterJoin.cpp`
+- and ~10 sibling transforms.
+
+PostgreSQL handles plain `EXISTS` / `NOT EXISTS` well, but `= (SELECT ...)`,
+`IN (SELECT ...)`, nested correlation, and subqueries with aggregates fall to
+`SubPlan` / `InitPlan`. This is where ORCA opens the largest single-query gaps.
+
+### 4.2 Exhaustive join-order enumeration (DPv2)
+
+`CJoinOrderDPv2` plus the commutativity and associativity xforms enumerate the
+full join space under ORCA's cardinality model, including bushy plans. The
+join-order search threshold is controlled internally by
+`optimizer_join_order_threshold` (default 10).
+
+PostgreSQL's comparison: `geqo_threshold = 12` switches to a genetic algorithm
+above 12 relations; below it, the greedy DP is left-deep biased. Neither path
+searches bushy plans aggressively.
+
+### 4.3 Robust statistics propagation
+
+`CGroupByStatsProcessor::CalcGroupByStats` preserves the full input histogram
+(including NDV) on grouping columns. CTE consumers inherit stats via colid
+mapping. The result is that downstream joins on grouped or CTE-emerged
+columns still see real cardinalities, not defaults.
+
+### 4.4 Partitioned tables (DynamicTableScan)
+
+DXL's `PartitionSelector` is wired through pg_orca's translation layer
+end-to-end. Partition pruning happens both at optimization time (for constant
+predicates) and at runtime (for join-key derived predicates). Runtime pruning
+on join keys is something PostgreSQL's planner cannot perform.
+
+---
+
+## 5. Architecture
+
+Query flow:
+
+```
+PostgreSQL Query AST
+        ↓ planner_hook (registered by pg_orca._PG_init)
+pg_orca
+        ↓ translate/ (gpopt/translate/)
+DXL representation
+        ↓
+ORCA Optimizer (libgpopt)
+  ├── Memo (Volcano/Cascades-style group structure)
+  ├── Transformation rules (xforms)
+  └── Cost model (libgpdbcost) + Statistics
+        ↓
+DXL Plan (lowest-cost alternative)
+        ↓ translate back
+PostgreSQL PlannedStmt
+        ↓
+PostgreSQL Executor
+```
+
+On failure (unsupported feature, internal error, timeout): falls back to
+`standard_planner`. Enable `pg_orca.trace_fallback = on` to log every fallback
+with its reason.
+
+### Code layout
+
+| Path | Purpose |
+|---|---|
+| `pg_orca.cpp` | Extension entry point, `planner_hook`, GUC definitions, `_PG_init` / `_PG_fini` |
+| `gpopt/` | PG ↔ ORCA bridge: config, relcache, translate, utils |
+| `include/gpopt/` | Headers for the gpopt integration layer |
+| `compat/` | Stub headers replacing MPP-only Cloudberry types for single-node PG18 |
+| `libgpos/` | Memory pools, error handling, concurrency (ORCA base library) |
+| `libnaucrates/` | DXL XML parser/serializer, metadata abstractions |
+| `libgpopt/` | Core optimizer: search engine, transformation rules, cost model framework |
+| `libgpdbcost/` | GPDB-specific cost model |
+
+---
+
+## 6. GUC parameters
+
+| Parameter | Default | Description |
+|---|---|---|
+| `pg_orca.enable_orca` | `off` | Master switch for ORCA per session |
+| `pg_orca.trace_fallback` | `off` | Log a NOTICE when a query falls back to standard_planner |
+| `optimizer_segments` | `1` | Segment count used in cost estimation (single-node = 1) |
+| `optimizer_sort_factor` | `1.0` | Cost-model scaling for sort operations |
+| `optimizer_metadata_caching` | `on` | Cache relation metadata between calls |
+| `optimizer_mdcache_size` | `16384` | Metadata cache size in KB |
+| `optimizer_search_strategy_path` | `""` | Path to a custom search strategy XML (empty = built-in) |
+
+---
+
+## 7. Known limitations
+
+### 7.1 Planning overhead is high
+
+ORCA's CBO is consistently heavier than PostgreSQL's planner.
+
+| Workload | ORCA planning | PG planning |
+|---|---:|---:|
+| 1-row point lookup | 13.7 ms | 0.25 ms |
+| Simple aggregate over 1 table | 3.8 ms | 0.14 ms |
+| TPC-H Q4 (inner join + EXISTS + GroupBy) | 169 ms | 5.5 ms |
+| TPC-DS Q31 (2 CTEs, 6-way self-join) | 192 ms | 3.6 ms |
+
+For OLTP / short-running queries (exec < 50 ms), planning dominates total
+latency. pg_orca is not recommended for latency-sensitive web-request paths.
+
+### 7.2 No parallel query yet
+
+ORCA emits serial plans only. `Gather`, `Parallel Seq Scan`, `Parallel Hash
+Join` nodes are not generated. Benchmarks above run with
+`max_parallel_workers_per_gather = 0` for fairness. On hardware where PG
+benefits substantially from parallelism, ORCA's serial plan can lose on wall
+time even when the plan shape is structurally better.
+
+---
+
+## 8. Frequently asked questions
+
+**Does pg_orca replace PostgreSQL's planner?**
+No. It registers a `planner_hook` and is opt-in via `SET pg_orca.enable_orca = on`
+— per session, or persistently with `ALTER DATABASE mydb SET pg_orca.enable_orca = on`.
+When disabled, PostgreSQL behaves exactly as it would without the extension loaded.
+
+**Will it break my existing queries?**
+On any unsupported feature or internal failure, pg_orca falls back to
+`standard_planner` automatically. Set `pg_orca.trace_fallback = on` to log every
+fallback with its reason.
+
+**Which PostgreSQL versions are supported?**
+PostgreSQL 18 only. The extension is built against PG 18's specific planner and
+executor APIs.
+
+**Is this production-ready?**
+Benchmark workloads (TPC-H, TPC-DS) are stable. Use it in development,
+evaluation, and analytical exploration. Mixed real-world workloads have not been
+extensively validated.
+
+**How does it compare to pg_hint_plan?**
+`pg_hint_plan` steers PostgreSQL's planner with hints — same algorithm,
+different inputs. pg_orca replaces the planner entirely with ORCA's cost-based
+search. They solve different problems and can coexist (one per session).
+
+**What's the license?**
+MIT-style for the integration layer; ORCA's source is Apache 2.0 from Apache
+Cloudberry. Full notices in `LICENSE` and `NOTICE` files.
+
+**Can I tune ORCA's behavior?**
+Yes — see §6 above for GUC parameters.
+
+---
+
+## 9. Citation
+
+When citing pg_orca in articles, blog posts, or papers:
+
+> pg_orca: A PostgreSQL 18 extension integrating the ORCA cost-based query
+> optimizer from Apache Cloudberry. QuantumIO, 2026.
+> https://quantumio.com.cn — https://github.com/quantumiodb/pgorca
+
+When citing benchmark numbers, include the report date (2026-05-27) and build
+hash (`b17245d`) so the numbers are reproducible.
+
+For the original ORCA optimizer design:
+
+> Mohamed A. Soliman et al. "Orca: A Modular Query Optimizer Architecture for
+> Big Data." SIGMOD 2014.
+> https://15721.courses.cs.cmu.edu/spring2019/papers/22-optimizer1/p337-soliman.pdf

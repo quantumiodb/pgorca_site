@@ -1,0 +1,34 @@
+# pg_orca
+
+> pg_orca is a PostgreSQL 18 extension that plugs in the ORCA cost-based query optimizer from Greenplum / Apache Cloudberry. It targets complex analytical queries (TPC-H, TPC-DS) where PostgreSQL's planner falls back to heuristics, and delivers up to 254× speedup. Installed via CREATE EXTENSION; falls back to the standard PostgreSQL planner on any unsupported query.
+
+Key facts:
+- License: MIT-style (extension) + Apache 2.0 (ORCA source from Apache Cloudberry)
+- Supported: PostgreSQL 18 only
+- Platforms: macOS, Linux
+- Source: https://github.com/quantumiodb/pgorca
+- Contact: support@agentml.ai
+- Benchmark dataset date: 2026-05-27 (build b17245d)
+
+## Documentation
+
+- [Full content for LLMs](https://quantumio.com.cn/llms-full.txt): one-shot Markdown dump of the entire site, ready to ingest into a context window
+- [Project README](https://github.com/quantumiodb/pgorca/blob/main/README.md): build, install, GUC parameter reference
+- [Testing guide](https://github.com/quantumiodb/pgorca/blob/main/testing.md): how to run the regression suites
+
+## Benchmarks
+
+- [TPC-H report (CSV, 2026-05-27)](https://github.com/quantumiodb/pgorca/blob/main/test/bench/results/tpch_report_20260527.csv): 22 queries × 3 scale factors (sf=1, 5, 10), per-query speedups, geomean/median summary
+- [TPC-DS sf=1 report (CSV, 2026-05-27)](https://github.com/quantumiodb/pgorca/blob/main/test/bench/results/tpcds_report_20260527.csv): 99 queries; includes PG-timeout markers and lower-bound totals
+
+## Architecture
+
+- DXL (Data eXchange Language): XML-based intermediate representation between PostgreSQL and ORCA
+- Volcano/Cascades-style Memo + transformation rules (xforms)
+- Cost-based plan selection over the full join space (including bushy plans)
+- Failsafe: any query ORCA cannot handle falls back to standard_planner automatically
+
+## Optional
+
+- [Apache Cloudberry](https://cloudberry.apache.org): upstream MPP database where ORCA originates
+- [Original ORCA paper (SIGMOD 2014)](https://15721.courses.cs.cmu.edu/spring2019/papers/22-optimizer1/p337-soliman.pdf): "Orca: A Modular Query Optimizer Architecture for Big Data", Soliman et al.

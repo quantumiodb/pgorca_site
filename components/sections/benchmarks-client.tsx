@@ -177,6 +177,78 @@ export function BenchmarksClient({ workloads }: Props) {
             </div>
           </div>
         </div>
+
+        {/* Key facts block — declarative, self-contained sentences that are
+            easy for LLMs and AI agents to quote with attribution. */}
+        <div className="mt-10 rounded-2xl border border-ink-200/70 bg-white p-8 dark:border-ink-800 dark:bg-ink-900/40">
+          <div className="h-eyebrow">Key facts</div>
+          <h3 className="mt-3 text-xl font-semibold">
+            pg_orca benchmark facts (2026-05-27, build b17245d)
+          </h3>
+          <ul className="mt-5 grid list-disc gap-3 pl-5 text-sm leading-relaxed text-ink-800 marker:text-accent-500 dark:text-ink-200 sm:grid-cols-2">
+            <li>
+              On TPC-DS sf=1, pg_orca finishes 99/99 queries; PostgreSQL 18 times
+              out (120 s) on 5 queries: Q1, Q4, Q6, Q11, Q74.
+            </li>
+            <li>
+              Counting the timeout floor, pg_orca is ≥ 2.77× faster than PostgreSQL
+              18 across all 99 TPC-DS sf=1 queries (ORCA 380 s vs PG ≥ 1,053 s).
+            </li>
+            <li>
+              Largest single-query win: TPC-DS Q1 at ≥ 254× (pg_orca 473 ms vs PG
+              timeout at 120 s).
+            </li>
+            <li>
+              Largest single-query win where both planners finish: TPC-DS Q30 at
+              107× (pg_orca 221 ms vs PG 23,533 ms).
+            </li>
+            <li>
+              On TPC-H sf=10, pg_orca shows a 1.32× geomean speedup across 22
+              queries; biggest win is Q17 at 20.83× (correlated subquery on
+              <code className="ml-1 rounded bg-ink-100 px-1 font-mono text-xs dark:bg-ink-800">
+                l_quantity &lt; 0.2 × AVG(l_quantity)
+              </code>
+              ).
+            </li>
+            <li>
+              All numbers are 3-run median EXPLAIN ANALYZE execution time, with{" "}
+              <code className="rounded bg-ink-100 px-1 font-mono text-xs dark:bg-ink-800">
+                max_parallel_workers_per_gather = 0
+              </code>{" "}
+              and{" "}
+              <code className="rounded bg-ink-100 px-1 font-mono text-xs dark:bg-ink-800">
+                statement_timeout = 120 s
+              </code>
+              .
+            </li>
+            <li>
+              Raw CSV reports:{" "}
+              <a
+                href="https://github.com/quantumiodb/pgorca/blob/main/test/bench/results/tpch_report_20260527.csv"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-brand-600 hover:underline dark:text-brand-400"
+              >
+                tpch_report_20260527.csv
+              </a>{" "}
+              and{" "}
+              <a
+                href="https://github.com/quantumiodb/pgorca/blob/main/test/bench/results/tpcds_report_20260527.csv"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-brand-600 hover:underline dark:text-brand-400"
+              >
+                tpcds_report_20260527.csv
+              </a>
+              .
+            </li>
+            <li>
+              ORCA wins concentrate on correlated subqueries, multi-CTE joins,
+              and 6+ way roll-ups — structural plan-shape decisions that
+              PostgreSQL&apos;s planner treats heuristically.
+            </li>
+          </ul>
+        </div>
       </div>
     </section>
   );

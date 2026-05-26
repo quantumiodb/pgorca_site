@@ -95,6 +95,57 @@ export function JsonLd() {
     })),
   };
 
+  // Dataset descriptor for the published benchmark results. Helps Google
+  // Dataset Search index them and gives AI agents a stable, citable handle.
+  const benchmarkDataset = {
+    "@context": "https://schema.org",
+    "@type": "Dataset",
+    name: "pg_orca vs PostgreSQL 18 — TPC-H and TPC-DS benchmark results",
+    description:
+      "Per-query execution-time comparison of the pg_orca extension (ORCA optimizer) versus PostgreSQL 18's built-in planner. Includes TPC-H at scale factors 1, 5, and 10 (22 queries each) and TPC-DS at scale factor 1 (99 queries). Numbers are 3-run median EXPLAIN ANALYZE execution time with max_parallel_workers_per_gather = 0 and statement_timeout = 120 s.",
+    url: site.url + "#benchmarks",
+    keywords: [
+      "TPC-H",
+      "TPC-DS",
+      "PostgreSQL",
+      "query optimizer",
+      "ORCA",
+      "benchmark",
+    ],
+    license: "https://opensource.org/licenses/MIT",
+    creator: {
+      "@type": "Organization",
+      name: "QuantumIO",
+      url: site.url,
+    },
+    datePublished: "2026-05-27",
+    dateModified: "2026-05-27",
+    version: "b17245d",
+    measurementTechnique: "EXPLAIN ANALYZE server-side Execution Time, 3-run median",
+    variableMeasured: [
+      "ORCA execution time (ms)",
+      "PostgreSQL execution time (ms)",
+      "Speedup ratio (PG / ORCA)",
+    ],
+    distribution: [
+      {
+        "@type": "DataDownload",
+        encodingFormat: "text/csv",
+        name: "TPC-H report (2026-05-27)",
+        contentUrl:
+          "https://github.com/quantumiodb/pgorca/raw/main/test/bench/results/tpch_report_20260527.csv",
+      },
+      {
+        "@type": "DataDownload",
+        encodingFormat: "text/csv",
+        name: "TPC-DS sf=1 report (2026-05-27)",
+        contentUrl:
+          "https://github.com/quantumiodb/pgorca/raw/main/test/bench/results/tpcds_report_20260527.csv",
+      },
+    ],
+    isAccessibleForFree: true,
+  };
+
   return (
     <>
       <script
@@ -112,6 +163,10 @@ export function JsonLd() {
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(faqPage) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(benchmarkDataset) }}
       />
     </>
   );
