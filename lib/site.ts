@@ -8,6 +8,7 @@ export const site = {
     "Open-source PostgreSQL 18 extension that plugs in the ORCA cost-based query optimizer from Greenplum / Apache Cloudberry. Up to 254× faster on TPC-H and TPC-DS analytical queries. MIT-licensed, single-node, install with CREATE EXTENSION.",
   url: "https://quantumio.com.cn",
   github: "https://github.com/quantumiodb/pgorca",
+  sponsor: "https://github.com/sponsors/quantumiodb",
   email: "support@agentml.ai",
   license: "MIT-style",
   keywords: [

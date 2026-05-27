@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Mail } from "lucide-react";
+import { Heart, Mail } from "lucide-react";
 import { site } from "@/lib/site";
 
 const cols = [
@@ -7,6 +7,7 @@ const cols = [
     title: "Project",
     links: [
       { href: site.github, label: "GitHub" },
+      { href: site.sponsor, label: "Sponsor on GitHub" },
       { href: `${site.github}/issues`, label: "Issues" },
       { href: `${site.github}/blob/main/LICENSE`, label: "License" },
     ],
@@ -48,13 +49,24 @@ export function Footer() {
               <span>pg_orca</span>
             </Link>
             <p className="mt-3 text-sm text-muted">{site.tagline}</p>
-            <a
-              href={`mailto:${site.email}`}
-              className="mt-4 inline-flex items-center gap-2 rounded-md border border-ink-200 bg-white px-3 py-1.5 text-xs font-mono text-ink-700 transition hover:border-brand-300 hover:text-brand-600 dark:border-ink-800 dark:bg-ink-900 dark:text-ink-200 dark:hover:border-brand-700 dark:hover:text-brand-400"
-            >
-              <Mail className="size-3.5" />
-              {site.email}
-            </a>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <a
+                href={site.sponsor}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-md border border-pink-300/70 bg-pink-50 px-3 py-1.5 text-xs font-medium text-pink-700 transition hover:border-pink-400 hover:bg-pink-100 dark:border-pink-700/40 dark:bg-pink-950/30 dark:text-pink-300 dark:hover:border-pink-600 dark:hover:bg-pink-950/60"
+              >
+                <Heart className="size-3.5 fill-current" />
+                Sponsor on GitHub
+              </a>
+              <a
+                href={`mailto:${site.email}`}
+                className="inline-flex items-center gap-2 rounded-md border border-ink-200 bg-white px-3 py-1.5 text-xs font-mono text-ink-700 transition hover:border-brand-300 hover:text-brand-600 dark:border-ink-800 dark:bg-ink-900 dark:text-ink-200 dark:hover:border-brand-700 dark:hover:text-brand-400"
+              >
+                <Mail className="size-3.5" />
+                {site.email}
+              </a>
+            </div>
           </div>
           {cols.map((c) => (
             <div key={c.title}>
