@@ -53,6 +53,10 @@ export const metadata: Metadata = {
       ],
       "application/atom+xml": [
         { url: "/blog/feed.xml", title: "pg_orca blog" },
+        {
+          url: "/blog/tags/postgres/feed.xml",
+          title: "pg_orca blog — PostgreSQL posts",
+        },
       ],
     },
   },

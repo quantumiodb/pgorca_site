@@ -99,6 +99,18 @@ export function formatPostDate(iso: string, variant: "short" | "long" = "short")
   return `${months[parseInt(mo, 10) - 1]} ${parseInt(d, 10)}, ${y}`;
 }
 
+export function getAllTags(): string[] {
+  const set = new Set<string>();
+  for (const p of getAllPosts()) {
+    for (const t of p.tags ?? []) set.add(t);
+  }
+  return Array.from(set).sort();
+}
+
+export function getPostsByTag(tag: string): PostMeta[] {
+  return getAllPosts().filter((p) => p.tags?.includes(tag));
+}
+
 export function getPost(slug: string): Post | null {
   const files = listPostFiles();
   const match = files.find((f) => {
