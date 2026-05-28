@@ -70,6 +70,7 @@ to a database or role, and existing sessions are unaffected until they reconnect
 
 - PostgreSQL 18 (with development headers)
 - xerces-c (XML parsing for DXL)
+- ICU (Unicode collation)
 - CMake ≥ 3.20
 - Ninja
 - C++17 compiler (clang or gcc)
@@ -78,7 +79,7 @@ to a database or role, and existing sessions are unaffected until they reconnect
 
 ```bash
 # macOS
-brew install xerces-c cmake ninja postgresql@18
+brew install postgresql@18 xerces-c cmake ninja icu4c
 
 # Debian / Ubuntu
 sudo apt install -y libxerces-c-dev cmake ninja-build build-essential

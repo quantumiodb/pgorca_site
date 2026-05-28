@@ -56,7 +56,7 @@ export function JsonLd() {
       url: site.url,
       email: site.email,
     },
-    softwareRequirements: "PostgreSQL 18, xerces-c, CMake ≥ 3.20, C++17 compiler",
+    softwareRequirements: "PostgreSQL 18, xerces-c, ICU, CMake ≥ 3.20, C++17 compiler",
     keywords: site.keywords.join(", "),
   };
 

@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 type Os = "macos" | "linux";
 
 const deps = {
-  macos: `brew install xerces-c cmake ninja postgresql@18`,
+  macos: `brew install postgresql@18 xerces-c cmake ninja icu4c`,
   linux: `# Debian / Ubuntu
 sudo apt install -y libxerces-c-dev cmake ninja-build build-essential
 # (Build PostgreSQL 18 from source or use the official PGDG repo)`,
@@ -64,8 +64,8 @@ export function Install() {
             Install pg_orca on PostgreSQL 18 in three steps.
           </h2>
           <p className="mt-4 text-lg text-muted">
-            Requires PostgreSQL 18, xerces-c, CMake ≥ 3.20, and a C++17 compiler. No
-            patches to PostgreSQL itself.
+            Requires PostgreSQL 18, xerces-c, ICU, CMake ≥ 3.20, and a C++17 compiler.
+            No patches to PostgreSQL itself.
           </p>
         </div>
 
