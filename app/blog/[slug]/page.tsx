@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { evaluate } from "@mdx-js/mdx";
 import * as runtime from "react/jsx-runtime";
+import remarkGfm from "remark-gfm";
 import rehypeSlug from "rehype-slug";
 import rehypeAutolinkHeadings from "rehype-autolink-headings";
 import rehypeShiki from "@shikijs/rehype";
@@ -129,6 +130,7 @@ export default async function PostPage({
           {await (async () => {
             const { default: MDXContent } = await evaluate(post.content, {
               ...runtime,
+              remarkPlugins: [remarkGfm],
               rehypePlugins: [
                 rehypeSlug,
                 [
