@@ -51,6 +51,9 @@ export const metadata: Metadata = {
         { url: "/llms.txt", title: "LLM-friendly site index" },
         { url: "/llms-full.txt", title: "Full content for LLM ingestion" },
       ],
+      "application/atom+xml": [
+        { url: "/blog/feed.xml", title: "pg_orca blog" },
+      ],
     },
   },
   openGraph: {

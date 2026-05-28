@@ -1,0 +1,324 @@
+---
+title: "ORCA 101: How a Cascades-style optimizer actually works"
+description: "A single-node walkthrough of ORCA's four-step optimization pipeline — Memo, transformation rules, statistics, and property enforcement — and how it differs from PostgreSQL's planner."
+date: 2026-05-28
+tags: [orca, internals, optimizer]
+author: Jianghua Yang
+---
+
+PostgreSQL's planner is a finely tuned thing. It walks the join tree
+left-deep, uses dynamic programming up to `geqo_threshold` relations, and
+falls back to a genetic algorithm beyond that. For OLTP and most reporting
+queries, it produces near-optimal plans in microseconds.
+
+ORCA takes a different approach. It is a **Cascades-style cost-based
+optimizer**: it doesn't generate one plan, it generates a *space* of
+equivalent plans, prices every one of them, and picks the cheapest. The
+search engine, the cost model, and the metadata access are decoupled from
+the host database — which is what made it possible to lift ORCA out of
+Greenplum and drop it into PostgreSQL 18 as
+[`pg_orca`](https://github.com/quantumiodb/pgorca).
+
+This post is a guided tour of how that optimizer actually works, framed for
+single-node PostgreSQL. No Greenplum knowledge required.
+
+## The big idea: optimizer as a separate process
+
+PostgreSQL's planner lives *inside* the backend. It reads from
+`pg_statistic` directly, calls executor utilities, and emits a `PlannedStmt`
+that the executor consumes. The boundary between planner and executor is a
+struct.
+
+ORCA's boundary is a serialization format called **DXL** — Data eXchange
+Language, an XML dialect that describes queries, metadata, and plans. The
+optimizer doesn't know what database it's optimizing for. It asks the host
+three things, over DXL:
+
+1. *Here is the query as a relational algebra tree. What's the cheapest plan?*
+2. *I need statistics for these columns. Can you provide them?*
+3. *Here is the plan I picked. Translate it back to your executor's format.*
+
+<figure>
+<svg viewBox="0 0 760 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="DXL boundary between PostgreSQL and ORCA, with ORCA's internal components">
+  <style>{`
+    .box  { fill: none; stroke: currentColor; stroke-width: 1.5; }
+    .lbl  { fill: currentColor; font: 600 13px ui-monospace, monospace; }
+    .sub  { fill: currentColor; font: 12px ui-sans-serif, system-ui; opacity: 0.75; }
+    .tiny { fill: currentColor; font: 11px ui-sans-serif, system-ui; opacity: 0.6; }
+    .arr  { stroke: currentColor; stroke-width: 1.5; fill: none; marker-end: url(#a); }
+    .dxl  { fill: currentColor; font: 600 11px ui-monospace, monospace; opacity: 0.85; }
+    .core { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-dasharray: 4 3; opacity: 0.7; }
+    .step { fill: none; stroke: currentColor; stroke-width: 1.2; opacity: 0.9; }
+    .num  { fill: currentColor; font: 700 11px ui-monospace, monospace; opacity: 0.55; }
+  `}</style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" />
+    </marker>
+  </defs>
+
+  {/* Left: PostgreSQL backend */}
+  <rect className="box" x="20" y="40" width="240" height="280" rx="8" />
+  <text className="lbl" x="40" y="68">PostgreSQL backend</text>
+  <text className="tiny" x="40" y="86">parser · catalog · executor</text>
+  <rect className="box" x="40" y="108" width="200" height="40" rx="6" />
+  <text className="sub" x="60" y="133">Query → DXL</text>
+  <rect className="box" x="40" y="168" width="200" height="40" rx="6" />
+  <text className="sub" x="60" y="193">MD Provider (stats, schema)</text>
+  <rect className="box" x="40" y="228" width="200" height="40" rx="6" />
+  <text className="sub" x="60" y="253">DXL → Plan</text>
+
+  {/* Right: ORCA, expanded */}
+  <rect className="box" x="440" y="20" width="300" height="320" rx="8" />
+  <text className="lbl" x="460" y="48">ORCA</text>
+
+  {/* Search engine (the orchestrator) */}
+  <rect className="step" x="460" y="68" width="260" height="34" rx="5" />
+  <text className="sub" x="478" y="90">Search engine — drives the 4 steps</text>
+
+  {/* The four steps */}
+  <rect className="step" x="460" y="118" width="260" height="28" rx="4" />
+  <text className="num" x="468" y="137">1</text>
+  <text className="sub" x="486" y="137">Exploration · transformation rules</text>
+
+  <rect className="step" x="460" y="152" width="260" height="28" rx="4" />
+  <text className="num" x="468" y="171">2</text>
+  <text className="sub" x="486" y="171">Stats derivation · cardinality</text>
+
+  <rect className="step" x="460" y="186" width="260" height="28" rx="4" />
+  <text className="num" x="468" y="205">3</text>
+  <text className="sub" x="486" y="205">Implementation · logical → physical</text>
+
+  <rect className="step" x="460" y="220" width="260" height="28" rx="4" />
+  <text className="num" x="468" y="239">4</text>
+  <text className="sub" x="486" y="239">Properties · costing · enforcement</text>
+
+  {/* Shared state */}
+  <rect className="core" x="460" y="262" width="125" height="62" rx="5" />
+  <text className="sub" x="472" y="284">Memo</text>
+  <text className="tiny" x="472" y="302">groups of equivalent</text>
+  <text className="tiny" x="472" y="316">expressions</text>
+
+  <rect className="core" x="595" y="262" width="125" height="62" rx="5" />
+  <text className="sub" x="607" y="284">Cost model</text>
+  <text className="tiny" x="607" y="302">+ MD Cache (stats,</text>
+  <text className="tiny" x="607" y="316">schema, types)</text>
+
+  {/* DXL arrows */}
+  <path className="arr" d="M 260 128 L 440 128" />
+  <text className="dxl" x="300" y="120">DXL query</text>
+  <path className="arr" d="M 440 188 L 260 188" />
+  <text className="dxl" x="300" y="180">stats request (DXL)</text>
+  <path className="arr" d="M 440 248 L 260 248" />
+  <text className="dxl" x="300" y="240">DXL plan</text>
+</svg>
+<figcaption>ORCA never touches PostgreSQL's internals directly. Everything crosses a DXL boundary. Inside ORCA, the search engine drives a four-step pipeline that reads and writes a shared Memo, priced by a pluggable cost model and metadata cache.</figcaption>
+</figure>
+
+In `pg_orca`, this boundary survives intact. The PostgreSQL extension
+implements the three translator components — query-to-DXL, MD provider,
+DXL-to-plan — and ORCA itself runs in-process but logically isolated. When
+ORCA can't handle a query, the boundary makes fallback trivial: discard the
+DXL, hand the parse tree back to `standard_planner`, done.
+
+## The four steps of optimization
+
+Every query that enters ORCA goes through four phases. The names below
+match the source code, so you can grep for them.
+
+### Step 1 — Exploration: enumerate equivalent plans
+
+ORCA builds a structure called the **Memo**. The Memo is a forest of
+*groups*, where each group holds a set of operator expressions that all
+produce the same relation. Two expressions in the same group are by
+definition equivalent — they compute the same rows, just differently.
+
+Start with this query:
+
+```sql
+SELECT * FROM t1 JOIN t2 ON t1.a = t2.b;
+```
+
+After parsing, the initial Memo has three groups:
+
+```
+GROUP 0: [ InnerJoin(t1.a = t2.b) [1, 2] ]
+GROUP 1: [ Get(t1) ]
+GROUP 2: [ Get(t2) ]
+```
+
+Group 0's only member references groups 1 and 2 as its inputs. Now ORCA
+applies **transformation rules**. The first one to fire is *join
+commutativity*: `A ⋈ B ≡ B ⋈ A`. After firing, group 0 has two members:
+
+```
+GROUP 0: [ InnerJoin [1, 2], InnerJoin [2, 1] ]
+GROUP 1: [ Get(t1) ]
+GROUP 2: [ Get(t2) ]
+```
+
+The Memo doesn't *replace* the old expression. It accumulates alternatives.
+For a five-way join, the Memo will end up holding hundreds of
+algebraically-equivalent join trees — left-deep, right-deep, bushy,
+reordered — without ever materializing them as separate plan trees.
+
+This is the single biggest win over PostgreSQL's planner: ORCA considers
+**bushy plans**. PostgreSQL only generates left-deep joins, which leaves
+performance on the table for analytical queries where intermediate result
+sizes vary by orders of magnitude.
+
+### Step 2 — Statistics derivation: cardinality estimation
+
+Plan enumeration is worthless without cardinality estimates. For every
+group, ORCA derives a `CStatistics` object containing row counts and
+per-column histograms. It does this lazily, asking the host (via the MD
+Provider) for base-table stats and then propagating them up through joins,
+filters, and aggregates.
+
+The propagation logic is identical in spirit to what PostgreSQL does in
+`clauselist_selectivity` — but ORCA does it once per *group*, not once per
+candidate plan. Because groups are shared, an expensive subquery's
+cardinality is estimated exactly once even if it appears in fifty
+candidate plans.
+
+### Step 3 — Implementation: logical to physical
+
+So far everything in the Memo is *logical*: `InnerJoin`, `Get`, `GbAgg`.
+Now ORCA applies a second class of transformation — implementation rules —
+that convert each logical operator into one or more physical alternatives.
+
+```
+InnerJoin [1, 2]
+  ↓ implementation rules
+InnerHashJoin [1, 2]
+InnerNLJoin   [1, 2]
+InnerMergeJoin[1, 2]
+```
+
+All three live in the same group. They're equivalent (same rows), but they
+have different costs and different *physical properties* — sort order,
+locality, parallelism — which matters for the next step.
+
+### Step 4 — Optimization: properties, costing, enforcement
+
+The final step walks the Memo top-down, asking each group: *what is the
+cheapest plan that satisfies these required properties?*
+
+For a top-level `ORDER BY a`, the root demands sorted output on `a`. A
+`MergeJoin` on `a` provides that property for free. A `HashJoin` doesn't —
+so ORCA inserts a **Sort enforcer** above it and adds its cost.
+
+<figure>
+<svg viewBox="0 0 640 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Property enforcement: Sort inserted above HashJoin">
+  <style>{`
+    .node { fill: none; stroke: currentColor; stroke-width: 1.5; }
+    .lbl  { fill: currentColor; font: 600 13px ui-monospace, monospace; }
+    .cap  { fill: currentColor; font: 11px ui-sans-serif, system-ui; opacity: 0.7; }
+    .ed   { stroke: currentColor; stroke-width: 1.2; fill: none; }
+    .enf  { fill: currentColor; font: 600 13px ui-monospace, monospace; opacity: 0.9; }
+  `}</style>
+  <text className="cap" x="40" y="30">Alternative A — MergeJoin provides sort</text>
+  <rect className="node" x="60" y="50" width="120" height="32" rx="4" />
+  <text className="lbl" x="80" y="71">MergeJoin a</text>
+  <path className="ed" d="M 95 82 L 80 110" />
+  <path className="ed" d="M 145 82 L 160 110" />
+  <rect className="node" x="40" y="115" width="80" height="28" rx="4" />
+  <text className="lbl" x="55" y="134">Scan t1</text>
+  <rect className="node" x="130" y="115" width="80" height="28" rx="4" />
+  <text className="lbl" x="145" y="134">Scan t2</text>
+  <text className="cap" x="360" y="30">Alternative B — HashJoin + Sort enforcer</text>
+  <rect className="node" x="380" y="40" width="120" height="32" rx="4" />
+  <text className="enf" x="410" y="61">Sort a</text>
+  <path className="ed" d="M 440 72 L 440 90" />
+  <rect className="node" x="380" y="92" width="120" height="32" rx="4" />
+  <text className="lbl" x="395" y="113">HashJoin a=b</text>
+  <path className="ed" d="M 415 124 L 400 150" />
+  <path className="ed" d="M 465 124 L 480 150" />
+  <rect className="node" x="360" y="155" width="80" height="28" rx="4" />
+  <text className="lbl" x="375" y="174">Scan t1</text>
+  <rect className="node" x="450" y="155" width="80" height="28" rx="4" />
+  <text className="lbl" x="465" y="174">Scan t2</text>
+</svg>
+<figcaption>The optimizer compares the cost of MergeJoin against HashJoin + Sort. Sometimes the enforcer is cheaper than a structurally sort-friendly join.</figcaption>
+</figure>
+
+The same mechanism handles every kind of plan property — sort order, NULL
+ordering, even partition awareness. Because requirements flow *down* the
+tree and best plans bubble *up*, ORCA never has to enumerate full physical
+plans. It picks the winning physical expression in each group, glues them
+together, and emits the final tree.
+
+## Transformation rules: where the search power comes from
+
+A Cascades optimizer's behavior is almost entirely defined by its rule
+library. ORCA ships about 130 rules; each one is a small object with two
+pieces:
+
+- **A pattern** — the shape of the expression it matches (e.g. "a `GbAgg`
+  on top of any relational child")
+- **A transform** — the new expression it produces
+
+Some examples of what these rules do:
+
+- `JoinCommutativity` — `A ⋈ B ≡ B ⋈ A`
+- `JoinAssociativity` — `(A ⋈ B) ⋈ C ≡ A ⋈ (B ⋈ C)`
+- `PushDownFilter` — move predicates closer to scans
+- `SplitGbAgg` — split a global aggregate into local + global
+- `Decorrelate*` — pull correlated subqueries up into joins
+- `ImplementInnerJoinAsHashJoin` — pick a physical operator
+
+Rules can fire on each other's output. Join commutativity plus associativity
+together generate the full space of n-ary join orderings, bushy plans
+included. The search engine keeps firing rules until the Memo is closed
+under all applicable rules, then costs the result.
+
+Decorrelation deserves a special mention: it is the source of most of the
+dramatic speedups you see in our [TPC-DS benchmarks](/#benchmarks). A
+correlated `EXISTS` subquery that PostgreSQL evaluates row-by-row becomes,
+under ORCA, a single semi-join — orders of magnitude faster on large
+inputs.
+
+## Reading the source tree
+
+If you want to dive into the code, here's a 30-second tour of the
+top-level libraries. The relevant headers live under
+[`gporca/`](https://github.com/quantumiodb/pgorca/tree/main/gporca):
+
+- **`libgpos`** — the foundation layer. Memory pools, exceptions, threading
+  primitives, the unit-test harness. You rarely need to touch this.
+- **`libnaucrates`** — DXL, metadata, statistics. This is the wire format
+  and the cardinality estimator. When stats look wrong, this is where to
+  look.
+- **`libgpopt`** — the optimizer itself. Operators, the Memo, the search
+  engine, the transformation rules. The `xforms/` directory is one file per
+  rule.
+- **`libgpdbcost`** — the cost model. Number-of-rows × cost-per-row, with
+  knobs for hash buildup, sort spill, index lookup latency.
+
+The PostgreSQL integration lives outside of these libraries, in `pg_orca`'s
+top-level `src/` — that's where the `planner_hook`, the DXL translators,
+and the fallback machinery live. We'll cover that layer in a future post.
+
+## What this means for pg_orca
+
+The four-step pipeline is exactly the same on a single-node PostgreSQL as
+it was on a 32-segment Greenplum cluster. The Memo, the rules, the
+statistics derivation, the property framework — all of it runs unchanged.
+
+What's different is what the cost model prices. The Greenplum cost model
+has a term for *redistribution* — the cost of shuffling tuples between
+segments. On a single node, that term is zero. The MPP-specific
+enforcement rules (Gather, Redistribute, Broadcast) still exist in the rule
+library, but they never fire because the property framework never demands
+the distribution properties they satisfy.
+
+In other words: ORCA on PostgreSQL is the same optimizer with a tighter
+cost model. The bushy plans, the decorrelation, the exhaustive join search
+— that's all still there. That's why `pg_orca` can find plans the
+PostgreSQL planner can't, even on a laptop.
+
+---
+
+*Adapted from the
+[GPORCA OSS 101 wiki](https://github.com/quantumiodb/pgorca/wiki/GPORCA-OSS-101)
+and the [SIGMOD 2014 paper](https://15721.courses.cs.cmu.edu/spring2019/papers/22-optimizer1/p337-soliman.pdf).*
