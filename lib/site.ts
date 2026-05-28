@@ -3,9 +3,12 @@ export const site = {
   // <60 chars, primary keyword first — used as the browser tab title.
   title: "pg_orca: ORCA Query Optimizer for PostgreSQL 18",
   tagline: "The ORCA query optimizer, now a PostgreSQL 18 extension.",
-  // <160 chars for Google snippet; loaded with keywords + the headline number.
+  // 70–155 chars (Bing window; Google truncates around 160). Leads with
+  // the action and headline number; ends with "PostgreSQL 18" so the
+  // precise-version long-tail keyword still ranks without bloating the
+  // snippet.
   description:
-    "Open-source PostgreSQL 18 extension that plugs in the ORCA cost-based query optimizer from Greenplum / Apache Cloudberry. Up to 254× faster on TPC-H and TPC-DS analytical queries. MIT-licensed, single-node, install with CREATE EXTENSION.",
+    "PostgreSQL extension that plugs in the ORCA cost-based query optimizer. Up to 254× faster on TPC-H and TPC-DS analytical queries. PostgreSQL 18, MIT-licensed.",
   // Canonical (SEO-indexed) origin. agentml.ai is served globally;
   // quantumio.com.cn is a China-accelerator mirror that serves identical
   // content but is excluded from indexing via the canonical tag below.
