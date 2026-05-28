@@ -1,8 +1,21 @@
 import type { MetadataRoute } from "next";
+import { headers } from "next/headers";
 import { getAllPosts } from "@/lib/posts";
 import { site } from "@/lib/site";
 
-export default function sitemap(): MetadataRoute.Sitemap {
+// Per-request so we can vary by Host (CN mirror returns an empty sitemap).
+export const dynamic = "force-dynamic";
+
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const hdrs = await headers();
+  const host = (hdrs.get("host") || "").toLowerCase();
+  const cnHost = new URL(site.cnMirror).host;
+
+  // The China-accelerator mirror serves identical HTML to humans but
+  // must not advertise URLs to crawlers — robots.txt disallows everything,
+  // and the sitemap is empty so Bing/Baidu don't try to index this host.
+  if (host === cnHost) return [];
+
   const now = new Date();
   const posts = getAllPosts();
 
