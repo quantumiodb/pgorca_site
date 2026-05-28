@@ -320,3 +320,455 @@ For the original ORCA optimizer design:
 > Mohamed A. Soliman et al. "Orca: A Modular Query Optimizer Architecture for
 > Big Data." SIGMOD 2014.
 > https://15721.courses.cs.cmu.edu/spring2019/papers/22-optimizer1/p337-soliman.pdf
+
+
+---
+
+## 10. Blog posts
+
+The pg_orca blog publishes in-depth writeups on the optimizer's internals,
+configuration, and behavior. The two seed posts are reproduced below for
+LLM ingestion. The live versions, with diagrams, are at:
+
+- https://quantumio.com.cn/blog/orca-101-how-cascades-optimizer-works
+- https://quantumio.com.cn/blog/pg-orca-guc-reference
+
+Atom feeds: https://quantumio.com.cn/blog/feed.xml (all posts) and
+https://quantumio.com.cn/blog/tags/postgres/feed.xml (PostgreSQL-tagged subset
+published to Planet PostgreSQL).
+
+---
+
+### Post 1: ORCA 101: How a Cascades-style optimizer actually works
+
+*Published 2026-05-28 by Jianghua Yang. Tags: postgres, orca, internals, optimizer. Source: https://quantumio.com.cn/blog/orca-101-how-cascades-optimizer-works*
+
+PostgreSQL's planner is a finely tuned thing. It walks the join tree
+left-deep, uses dynamic programming up to `geqo_threshold` relations, and
+falls back to a genetic algorithm beyond that. For OLTP and most reporting
+queries, it produces near-optimal plans in microseconds.
+
+ORCA takes a different approach. It is a **Cascades-style cost-based
+optimizer**: it doesn't generate one plan, it generates a *space* of
+equivalent plans, prices every one of them, and picks the cheapest. The
+search engine, the cost model, and the metadata access are decoupled from
+the host database — which is what made it possible to lift ORCA out of
+Greenplum and drop it into PostgreSQL 18 as
+[`pg_orca`](https://github.com/quantumiodb/pgorca).
+
+This post is a guided tour of how that optimizer actually works, framed for
+single-node PostgreSQL. No Greenplum knowledge required.
+
+## The big idea: optimizer as a separate process
+
+PostgreSQL's planner lives *inside* the backend. It reads from
+`pg_statistic` directly, calls executor utilities, and emits a `PlannedStmt`
+that the executor consumes. The boundary between planner and executor is a
+struct.
+
+ORCA's boundary is a serialization format called **DXL** — Data eXchange
+Language, an XML dialect that describes queries, metadata, and plans. The
+optimizer doesn't know what database it's optimizing for. It asks the host
+three things, over DXL:
+
+1. *Here is the query as a relational algebra tree. What's the cheapest plan?*
+2. *I need statistics for these columns. Can you provide them?*
+3. *Here is the plan I picked. Translate it back to your executor's format.*
+
+*ORCA never touches PostgreSQL's internals directly. Everything crosses a DXL boundary. Inside ORCA, the search engine drives a four-step pipeline that reads and writes a shared Memo, priced by a pluggable cost model and metadata cache.*
+
+In `pg_orca`, this boundary survives intact. The PostgreSQL extension
+implements the three translator components — query-to-DXL, MD provider,
+DXL-to-plan — and ORCA itself runs in-process but logically isolated. When
+ORCA can't handle a query, the boundary makes fallback trivial: discard the
+DXL, hand the parse tree back to `standard_planner`, done.
+
+## The four steps of optimization
+
+Every query that enters ORCA goes through four phases. The names below
+match the source code, so you can grep for them.
+
+### Step 1 — Exploration: enumerate equivalent plans
+
+ORCA builds a structure called the **Memo**. The Memo is a forest of
+*groups*, where each group holds a set of operator expressions that all
+produce the same relation. Two expressions in the same group are by
+definition equivalent — they compute the same rows, just differently.
+
+Start with this query:
+
+```sql
+SELECT * FROM t1 JOIN t2 ON t1.a = t2.b;
+```
+
+After parsing, the initial Memo has three groups:
+
+```
+GROUP 0: [ InnerJoin(t1.a = t2.b) [1, 2] ]
+GROUP 1: [ Get(t1) ]
+GROUP 2: [ Get(t2) ]
+```
+
+Group 0's only member references groups 1 and 2 as its inputs. Now ORCA
+applies **transformation rules**. The first one to fire is *join
+commutativity*: `A ⋈ B ≡ B ⋈ A`. After firing, group 0 has two members:
+
+```
+GROUP 0: [ InnerJoin [1, 2], InnerJoin [2, 1] ]
+GROUP 1: [ Get(t1) ]
+GROUP 2: [ Get(t2) ]
+```
+
+The Memo doesn't *replace* the old expression. It accumulates alternatives.
+For a five-way join, the Memo will end up holding hundreds of
+algebraically-equivalent join trees — left-deep, right-deep, bushy,
+reordered — without ever materializing them as separate plan trees.
+
+This is the single biggest win over PostgreSQL's planner: ORCA considers
+**bushy plans**. PostgreSQL only generates left-deep joins, which leaves
+performance on the table for analytical queries where intermediate result
+sizes vary by orders of magnitude.
+
+### Step 2 — Statistics derivation: cardinality estimation
+
+Plan enumeration is worthless without cardinality estimates. For every
+group, ORCA derives a `CStatistics` object containing row counts and
+per-column histograms. It does this lazily, asking the host (via the MD
+Provider) for base-table stats and then propagating them up through joins,
+filters, and aggregates.
+
+The propagation logic is identical in spirit to what PostgreSQL does in
+`clauselist_selectivity` — but ORCA does it once per *group*, not once per
+candidate plan. Because groups are shared, an expensive subquery's
+cardinality is estimated exactly once even if it appears in fifty
+candidate plans.
+
+### Step 3 — Implementation: logical to physical
+
+So far everything in the Memo is *logical*: `InnerJoin`, `Get`, `GbAgg`.
+Now ORCA applies a second class of transformation — implementation rules —
+that convert each logical operator into one or more physical alternatives.
+
+```
+InnerJoin [1, 2]
+  ↓ implementation rules
+InnerHashJoin [1, 2]
+InnerNLJoin   [1, 2]
+InnerMergeJoin[1, 2]
+```
+
+All three live in the same group. They're equivalent (same rows), but they
+have different costs and different *physical properties* — sort order,
+locality, parallelism — which matters for the next step.
+
+### Step 4 — Optimization: properties, costing, enforcement
+
+The final step walks the Memo top-down, asking each group: *what is the
+cheapest plan that satisfies these required properties?*
+
+For a top-level `ORDER BY a`, the root demands sorted output on `a`. A
+`MergeJoin` on `a` provides that property for free. A `HashJoin` doesn't —
+so ORCA inserts a **Sort enforcer** above it and adds its cost.
+
+*The optimizer compares the cost of MergeJoin against HashJoin + Sort. Sometimes the enforcer is cheaper than a structurally sort-friendly join.*
+
+The same mechanism handles every kind of plan property — sort order, NULL
+ordering, even partition awareness. Because requirements flow *down* the
+tree and best plans bubble *up*, ORCA never has to enumerate full physical
+plans. It picks the winning physical expression in each group, glues them
+together, and emits the final tree.
+
+## Transformation rules: where the search power comes from
+
+A Cascades optimizer's behavior is almost entirely defined by its rule
+library. ORCA ships about 130 rules; each one is a small object with two
+pieces:
+
+- **A pattern** — the shape of the expression it matches (e.g. "a `GbAgg`
+  on top of any relational child")
+- **A transform** — the new expression it produces
+
+Some examples of what these rules do:
+
+- `JoinCommutativity` — `A ⋈ B ≡ B ⋈ A`
+- `JoinAssociativity` — `(A ⋈ B) ⋈ C ≡ A ⋈ (B ⋈ C)`
+- `PushDownFilter` — move predicates closer to scans
+- `SplitGbAgg` — split a global aggregate into local + global
+- `Decorrelate*` — pull correlated subqueries up into joins
+- `ImplementInnerJoinAsHashJoin` — pick a physical operator
+
+Rules can fire on each other's output. Join commutativity plus associativity
+together generate the full space of n-ary join orderings, bushy plans
+included. The search engine keeps firing rules until the Memo is closed
+under all applicable rules, then costs the result.
+
+Decorrelation deserves a special mention: it is the source of most of the
+dramatic speedups you see in our [TPC-DS benchmarks](/#benchmarks). A
+correlated `EXISTS` subquery that PostgreSQL evaluates row-by-row becomes,
+under ORCA, a single semi-join — orders of magnitude faster on large
+inputs.
+
+## Reading the source tree
+
+If you want to dive into the code, here's a 30-second tour of the
+top-level libraries. The relevant headers live under
+[`gporca/`](https://github.com/quantumiodb/pgorca/tree/main/gporca):
+
+- **`libgpos`** — the foundation layer. Memory pools, exceptions, threading
+  primitives, the unit-test harness. You rarely need to touch this.
+- **`libnaucrates`** — DXL, metadata, statistics. This is the wire format
+  and the cardinality estimator. When stats look wrong, this is where to
+  look.
+- **`libgpopt`** — the optimizer itself. Operators, the Memo, the search
+  engine, the transformation rules. The `xforms/` directory is one file per
+  rule.
+- **`libgpdbcost`** — the cost model. Number-of-rows × cost-per-row, with
+  knobs for hash buildup, sort spill, index lookup latency.
+
+The PostgreSQL integration lives outside of these libraries, in `pg_orca`'s
+top-level `src/` — that's where the `planner_hook`, the DXL translators,
+and the fallback machinery live. We'll cover that layer in a future post.
+
+## What this means for pg_orca
+
+The four-step pipeline is exactly the same on a single-node PostgreSQL as
+it was on a 32-segment Greenplum cluster. The Memo, the rules, the
+statistics derivation, the property framework — all of it runs unchanged.
+
+What's different is what the cost model prices. The Greenplum cost model
+has a term for *redistribution* — the cost of shuffling tuples between
+segments. On a single node, that term is zero. The MPP-specific
+enforcement rules (Gather, Redistribute, Broadcast) still exist in the rule
+library, but they never fire because the property framework never demands
+the distribution properties they satisfy.
+
+In other words: ORCA on PostgreSQL is the same optimizer with a tighter
+cost model. The bushy plans, the decorrelation, the exhaustive join search
+— that's all still there. That's why `pg_orca` can find plans the
+PostgreSQL planner can't, even on a laptop.
+
+---
+
+*Adapted from the
+[GPORCA OSS 101 wiki](https://github.com/quantumiodb/pgorca/wiki/GPORCA-OSS-101)
+and the [SIGMOD 2014 paper](https://15721.courses.cs.cmu.edu/spring2019/papers/22-optimizer1/p337-soliman.pdf).*
+
+---
+
+### Post 2: Configuring pg_orca: a guide to the GUCs you'll actually use
+
+*Published 2026-05-28 by Jianghua Yang. Tags: postgres, orca, pg_orca, reference, configuration. Source: https://quantumio.com.cn/blog/pg-orca-guc-reference*
+
+`pg_orca` is a PostgreSQL 18 extension that swaps in the ORCA cost-based
+query optimizer for analytical queries. When enabled, ORCA generates
+plans that PostgreSQL's built-in planner won't — bushy joins,
+decorrelated subqueries, ahead-of-time partition pruning — and prices
+them with a PostgreSQL-aligned cost model.
+
+The extension exposes about thirty configuration parameters. Most users
+only need three: the master switch, the join-order algorithm, and the
+fallback tracer. This guide walks the rest in the order you're likely
+to meet them.
+
+All parameter names follow PostgreSQL convention and can be set with
+`SET`, `ALTER DATABASE`, `ALTER ROLE`, or in `postgresql.conf`. Scope
+labels (`USERSET`, `SUSET`) follow PostgreSQL's standard meaning.
+
+## Turning ORCA on
+
+### `pg_orca.enable_orca` · default `off` · `SUSET`
+
+The master switch. Installing the extension is harmless on its own — no
+plan changes until you turn this on. Typical pattern:
+
+```sql
+-- per session
+SET pg_orca.enable_orca = on;
+
+-- per database, persistent
+ALTER DATABASE warehouse SET pg_orca.enable_orca = on;
+```
+
+### `pg_orca.trace_fallback` · default `off` · `SUSET`
+
+ORCA will hand a query back to PostgreSQL's standard planner if it
+can't handle some feature in it. The hand-off is silent by default. Set
+this to `on` while evaluating pg_orca to see which fraction of your
+workload is actually being optimized by ORCA:
+
+```
+LOG:  pg_orca: falling back to standard planner
+DETAIL:  <reason>
+```
+
+Each fallback writes one log line. Disable it again in production.
+
+## Choosing a cost model
+
+### `pg_orca.cost_model` · default `pg` · `USERSET`
+
+Selects the cost model ORCA uses to compare candidate plans.
+
+| Value | Description |
+|---|---|
+| `pg` (default) | A PostgreSQL-aligned model. Prices plans using the same constants you already tune for the PostgreSQL planner: `cpu_operator_cost`, `cpu_tuple_cost`, `seq_page_cost`, `random_page_cost`, `work_mem`. |
+| `gpdb` | The legacy Greenplum calibration. Kept for parity testing. |
+
+The PG-aligned model is the default because it makes ORCA's costs
+directly comparable to PostgreSQL's. When you want to influence costing
+under this model — for example, to make sorts more expensive — adjust
+the standard PostgreSQL parameters; you don't need ORCA-specific knobs.
+
+A consequence of using the default model: a few legacy ORCA cost knobs
+have no effect. See *Legacy parameters* below.
+
+## Controlling join-order search
+
+This is where pg_orca diverges most visibly from PostgreSQL's planner.
+ORCA searches a much larger space of join orderings, including bushy
+trees that PostgreSQL never considers.
+
+### `optimizer_join_order` · default `exhaustive2` · `USERSET`
+
+Selects the algorithm ORCA uses to enumerate join orderings.
+
+| Value | Behavior |
+|---|---|
+| `query` | Use the join order exactly as written in the SQL. |
+| `greedy` | A fast heuristic. Plans aren't always optimal. |
+| `exhaustive` | Original exhaustive search. |
+| `exhaustive2` (default) | Improved exhaustive search; the algorithm that produces bushy plans. |
+
+For analytical workloads, leave this at `exhaustive2`. The other values
+are useful when planning time matters more than plan quality.
+
+### `pg_orca.join_order_dynamic_threshold` · default `12` · `USERSET`
+
+A safety valve for very large joins. When a query references at least
+this many base relations — counting tables nested inside subqueries and
+CTEs — and `optimizer_join_order` is `exhaustive` or `exhaustive2`,
+ORCA automatically downshifts to `greedy` for that single query and
+restores the setting afterward.
+
+The threshold counts across the *whole* query, so it applies to
+TPC-DS-style shapes (CTEs + subqueries) before the surface query looks
+large. Set it to `0` to disable the auto-downshift. Raise it if your
+hardware can afford longer planning time; lower it if you'd rather
+planning stay quick on moderately joined queries.
+
+## CTE handling
+
+PostgreSQL's planner has inlined `WITH` clauses by default since
+version 12. ORCA materializes them by default, which can hurt
+performance when the CTE is referenced only once. Two parameters
+control this:
+
+### `optimizer_cte_inlining` · default `off` · `USERSET`
+### `optimizer_cte_inlining_bound` · default `0` · `USERSET`
+
+To get PostgreSQL-style inlining behavior, set **both**: enable the
+feature, and raise the bound to the maximum number of references at
+which a CTE may still be inlined. A common starting point:
+
+```sql
+SET optimizer_cte_inlining = on;
+SET optimizer_cte_inlining_bound = 1;  -- inline only single-use CTEs
+```
+
+Above the bound, ORCA materializes the CTE.
+
+## Metadata cache
+
+ORCA caches relation statistics, type info, and operator definitions
+between calls so it doesn't re-walk PostgreSQL's catalog for every
+query.
+
+### `optimizer_metadata_caching` · default `on` · `USERSET`
+
+Leave on. The off path exists to diagnose cache-invalidation bugs.
+
+### `optimizer_mdcache_size` · default `16384` KB · `USERSET`
+
+Soft cap on cached metadata. 16 MB is enough for most schemas. Increase
+it if you have very many partitioned tables and observe repeated
+metadata work in `optimizer_print_optimization_stats` output.
+
+## Debug prints
+
+These parameters write diagnostic output to PostgreSQL's log. They
+default to `off` and are all `USERSET`. Reach for them when you want to
+understand *why* ORCA picked a particular plan.
+
+| Parameter | What it dumps |
+|---|---|
+| `optimizer_print_query` | The input query expression tree |
+| `optimizer_print_plan` | The final physical plan |
+| `optimizer_print_xform` | Input and output trees of each transformation rule that fires |
+| `optimizer_print_xform_results` | Full result set of each transformation — very verbose |
+| `optimizer_print_job_scheduler` | Search engine state-machine transitions |
+| `optimizer_print_optimization_stats` | Memo group counts, cache hit rates, time per phase |
+| `optimizer_print_memo_after_exploration` | The Memo after [step 1](/blog/orca-101-how-cascades-optimizer-works) |
+| `optimizer_print_memo_after_implementation` | The Memo after step 3 |
+| `optimizer_print_memo_after_optimization` | The Memo after step 4 |
+| `optimizer_print_optimization_context` | The property-requirement chain that drove step 4 |
+
+A useful starting combination when investigating an unexpected plan:
+
+```sql
+SET client_min_messages = log;
+SET pg_orca.enable_orca = on;
+SET optimizer_print_optimization_stats = on;
+SET optimizer_print_plan = on;
+EXPLAIN ANALYZE SELECT ... ;
+```
+
+`optimizer_print_xform = on` is very verbose. Only enable it on small
+test queries.
+
+## Legacy parameters (no effect under the default cost model)
+
+These parameters target either the legacy Greenplum cost model or the
+legacy statistics-damping path. Under the default configuration
+(`pg_orca.cost_model = pg`) they have no effect on plan choice. They
+remain registered for compatibility:
+
+| Parameter | Default |
+|---|---|
+| `optimizer_sort_factor` | `1.0` |
+| `optimizer_spilling_mem_threshold` | `0.0` |
+| `optimizer_index_join_allowed_risk_threshold` | `3.0` |
+| `optimizer_damping_factor_filter` | `0.75` |
+| `optimizer_damping_factor_join` | `0.0` |
+| `optimizer_damping_factor_groupby` | `0.75` |
+
+Under the default cost model:
+
+- To bias sort cost or control sort spill, adjust `cpu_operator_cost`
+  and `work_mem` — the same controls PostgreSQL uses.
+- To improve cardinality estimates, follow standard PostgreSQL
+  practice: run `ANALYZE`, declare foreign keys, use extended
+  statistics for correlated columns.
+
+## A typical configuration
+
+For most analytical workloads, this is enough:
+
+```sql
+-- Load the extension globally
+ALTER SYSTEM SET shared_preload_libraries = 'pg_orca';
+
+-- Enable ORCA on the database that needs it
+ALTER DATABASE warehouse SET pg_orca.enable_orca = on;
+
+-- During evaluation only: see why ORCA falls back on any given query
+ALTER DATABASE warehouse SET pg_orca.trace_fallback = on;
+```
+
+Everything else has a sensible default. Reach for the join-order or
+debug parameters when a specific query needs investigation, and consult
+this guide as a reference.
+
+If you find a query where a non-default parameter produces a
+materially better plan, please share the repro at
+[github.com/quantumiodb/pgorca/issues](https://github.com/quantumiodb/pgorca/issues) —
+that's the kind of feedback that improves the defaults.

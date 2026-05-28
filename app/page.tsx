@@ -5,6 +5,7 @@ import { Features } from "@/components/sections/features";
 import { Architecture } from "@/components/sections/architecture";
 import { Install } from "@/components/sections/install";
 import { Honest } from "@/components/sections/honest";
+import { BlogTeaser } from "@/components/sections/blog-teaser";
 import { Faq } from "@/components/sections/faq";
 
 export default function Home() {
@@ -17,6 +18,7 @@ export default function Home() {
       <Architecture />
       <Install />
       <Honest />
+      <BlogTeaser />
       <Faq />
     </>
   );

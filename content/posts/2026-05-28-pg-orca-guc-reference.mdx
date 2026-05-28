@@ -10,7 +10,10 @@ author: Jianghua Yang
 query optimizer for analytical queries. When enabled, ORCA generates
 plans that PostgreSQL's built-in planner won't — bushy joins,
 decorrelated subqueries, ahead-of-time partition pruning — and prices
-them with a PostgreSQL-aligned cost model.
+them with a PostgreSQL-aligned cost model. If you're new to how ORCA
+makes its decisions, the companion post
+[ORCA 101: How a Cascades-style optimizer actually works](/blog/orca-101-how-cascades-optimizer-works)
+walks through the four-step pipeline most of these parameters control.
 
 The extension exposes about thirty configuration parameters. Most users
 only need three: the master switch, the join-order algorithm, and the

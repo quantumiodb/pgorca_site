@@ -317,6 +317,15 @@ cost model. The bushy plans, the decorrelation, the exhaustive join search
 — that's all still there. That's why `pg_orca` can find plans the
 PostgreSQL planner can't, even on a laptop.
 
+## Next: configuring it
+
+Now that you know what's happening inside the optimizer, the natural
+follow-up is what you can tune from the outside. See
+[Configuring pg_orca: a guide to the GUCs you'll actually use](/blog/pg-orca-guc-reference)
+for the master switch, cost-model selector, join-order algorithms,
+and the debug prints that surface every step of the four-step pipeline
+described above.
+
 ---
 
 *Adapted from the
