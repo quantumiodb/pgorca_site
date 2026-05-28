@@ -12,7 +12,7 @@ Key facts:
 
 ## Documentation
 
-- [Full content for LLMs](https://quantumio.com.cn/llms-full.txt): one-shot Markdown dump of the entire site, ready to ingest into a context window
+- [Full content for LLMs](https://agentml.ai/llms-full.txt): one-shot Markdown dump of the entire site, ready to ingest into a context window
 - [Project README](https://github.com/quantumiodb/pgorca/blob/main/README.md): build, install, GUC parameter reference
 - [Testing guide](https://github.com/quantumiodb/pgorca/blob/main/testing.md): how to run the regression suites
 
@@ -20,11 +20,11 @@ Key facts:
 
 In-depth writeups on the optimizer's internals, configuration, and behavior. All posts available as an Atom feed; PostgreSQL-specific subset published to Planet PostgreSQL.
 
-- [Blog index](https://quantumio.com.cn/blog): all posts, newest first
-- [Atom feed (all posts)](https://quantumio.com.cn/blog/feed.xml)
-- [Atom feed (PostgreSQL-tagged posts)](https://quantumio.com.cn/blog/tags/postgres/feed.xml)
-- [ORCA 101: How a Cascades-style optimizer actually works](https://quantumio.com.cn/blog/orca-101-how-cascades-optimizer-works): single-node walkthrough of ORCA's four-step optimization pipeline — Memo, transformation rules, statistics, and property enforcement — and how it differs from PostgreSQL's planner
-- [Configuring pg_orca: a guide to the GUCs you'll actually use](https://quantumio.com.cn/blog/pg-orca-guc-reference): practical reference for pg_orca's configuration parameters — master switch, cost model selector, join-order algorithms, adaptive downshift, CTE inlining, metadata cache, and debug prints
+- [Blog index](https://agentml.ai/blog): all posts, newest first
+- [Atom feed (all posts)](https://agentml.ai/blog/feed.xml)
+- [Atom feed (PostgreSQL-tagged posts)](https://agentml.ai/blog/tags/postgres/feed.xml)
+- [ORCA 101: How a Cascades-style optimizer actually works](https://agentml.ai/blog/orca-101-how-cascades-optimizer-works): single-node walkthrough of ORCA's four-step optimization pipeline — Memo, transformation rules, statistics, and property enforcement — and how it differs from PostgreSQL's planner
+- [Configuring pg_orca: a guide to the GUCs you'll actually use](https://agentml.ai/blog/pg-orca-guc-reference): practical reference for pg_orca's configuration parameters — master switch, cost model selector, join-order algorithms, adaptive downshift, CTE inlining, metadata cache, and debug prints
 
 ## Benchmarks
 

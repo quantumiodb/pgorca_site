@@ -1,7 +1,7 @@
 # pg_orca — full documentation for LLM ingestion
 
 Last updated: 2026-05-27. Source repository: https://github.com/quantumiodb/pgorca.
-Website: https://quantumio.com.cn. Contact: support@agentml.ai.
+Website: https://agentml.ai. Contact: support@agentml.ai.
 
 This file is the single-source consolidated reference for LLMs and AI agents.
 Every claim below is paired with concrete numbers, query identifiers, or commit
@@ -310,7 +310,7 @@ When citing pg_orca in articles, blog posts, or papers:
 
 > pg_orca: A PostgreSQL 18 extension integrating the ORCA cost-based query
 > optimizer from Apache Cloudberry. QuantumIO, 2026.
-> https://quantumio.com.cn — https://github.com/quantumiodb/pgorca
+> https://agentml.ai — https://github.com/quantumiodb/pgorca
 
 When citing benchmark numbers, include the report date (2026-05-27) and build
 hash (`b17245d`) so the numbers are reproducible.
@@ -330,18 +330,18 @@ The pg_orca blog publishes in-depth writeups on the optimizer's internals,
 configuration, and behavior. The two seed posts are reproduced below for
 LLM ingestion. The live versions, with diagrams, are at:
 
-- https://quantumio.com.cn/blog/orca-101-how-cascades-optimizer-works
-- https://quantumio.com.cn/blog/pg-orca-guc-reference
+- https://agentml.ai/blog/orca-101-how-cascades-optimizer-works
+- https://agentml.ai/blog/pg-orca-guc-reference
 
-Atom feeds: https://quantumio.com.cn/blog/feed.xml (all posts) and
-https://quantumio.com.cn/blog/tags/postgres/feed.xml (PostgreSQL-tagged subset
+Atom feeds: https://agentml.ai/blog/feed.xml (all posts) and
+https://agentml.ai/blog/tags/postgres/feed.xml (PostgreSQL-tagged subset
 published to Planet PostgreSQL).
 
 ---
 
 ### Post 1: ORCA 101: How a Cascades-style optimizer actually works
 
-*Published 2026-05-28 by Jianghua Yang. Tags: postgres, orca, internals, optimizer. Source: https://quantumio.com.cn/blog/orca-101-how-cascades-optimizer-works*
+*Published 2026-05-28 by Jianghua Yang. Tags: postgres, orca, internals, optimizer. Source: https://agentml.ai/blog/orca-101-how-cascades-optimizer-works*
 
 PostgreSQL's planner is a finely tuned thing. It walks the join tree
 left-deep, uses dynamic programming up to `geqo_threshold` relations, and
@@ -557,7 +557,7 @@ and the [SIGMOD 2014 paper](https://15721.courses.cs.cmu.edu/spring2019/papers/2
 
 ### Post 2: Configuring pg_orca: a guide to the GUCs you'll actually use
 
-*Published 2026-05-28 by Jianghua Yang. Tags: postgres, orca, pg_orca, reference, configuration. Source: https://quantumio.com.cn/blog/pg-orca-guc-reference*
+*Published 2026-05-28 by Jianghua Yang. Tags: postgres, orca, pg_orca, reference, configuration. Source: https://agentml.ai/blog/pg-orca-guc-reference*
 
 `pg_orca` is a PostgreSQL 18 extension that swaps in the ORCA cost-based
 query optimizer for analytical queries. When enabled, ORCA generates

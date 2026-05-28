@@ -6,7 +6,11 @@ export const site = {
   // <160 chars for Google snippet; loaded with keywords + the headline number.
   description:
     "Open-source PostgreSQL 18 extension that plugs in the ORCA cost-based query optimizer from Greenplum / Apache Cloudberry. Up to 254× faster on TPC-H and TPC-DS analytical queries. MIT-licensed, single-node, install with CREATE EXTENSION.",
-  url: "https://quantumio.com.cn",
+  // Canonical (SEO-indexed) origin. agentml.ai is served globally;
+  // quantumio.com.cn is a China-accelerator mirror that serves identical
+  // content but is excluded from indexing via the canonical tag below.
+  url: "https://agentml.ai",
+  cnMirror: "https://quantumio.com.cn",
   github: "https://github.com/quantumiodb/pgorca",
   sponsor: "https://github.com/sponsors/quantumiodb",
   email: "support@agentml.ai",

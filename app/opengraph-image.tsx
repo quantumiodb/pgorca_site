@@ -147,7 +147,7 @@ export default async function OpengraphImage() {
           <div style={{ display: "flex", gap: "20px" }}>
             <span>MIT license</span>
             <span>·</span>
-            <span>quantumio.com.cn</span>
+            <span>agentml.ai</span>
           </div>
         </div>
       </div>
