@@ -1,0 +1,339 @@
+---
+title: "Decorrelating TPC-H Q17: a walkthrough of ORCA's Apply transformation"
+description: "A line-by-line look at how ORCA rewrites TPC-H Q17's correlated subquery into a join — the SubqueryHandler, the Apply2Join transformations, and a 10–19× wall-time speedup (planning + execution) across TPC-H scale factors."
+date: 2026-05-29
+tags: [postgres, orca, pg_orca, cascades, decorrelation, tpc-h, query-optimizer]
+author: Jianghua Yang
+---
+
+TPC-H Q17 is the query everyone reaches for when they want to argue
+about subquery decorrelation. It has a tiny SQL footprint, a single
+correlated predicate, and a runtime that varies by **more than an order
+of magnitude** depending on what the optimizer does with that one
+subquery. PostgreSQL 18's planner keeps the correlation and pays for
+it. ORCA rewrites it into a join and doesn't. This post walks through
+exactly how ORCA does that, and why the rewrite is an *algorithmic*
+improvement rather than a constant-factor one.
+
+If you haven't met `pg_orca` yet, the short version is: it's a
+PostgreSQL 18 extension that swaps in the Cascades-style ORCA
+optimizer from Greenplum / Apache Cloudberry through a
+`planner_hook`. The high-level intro lives at
+[pg_orca: a Cascades-style query optimizer for vanilla PostgreSQL 18](/blog/pg-orca-cascades-extension);
+this post zooms all the way in on a single transformation rule.
+
+## The query, and why it's hard
+
+```sql
+SELECT sum(l_extendedprice) / 7.0 AS avg_yearly
+FROM lineitem, part
+WHERE p_partkey = l_partkey
+  AND p_brand = 'Brand#23'
+  AND p_container = 'MED BOX'
+  AND l_quantity < (
+    SELECT 0.2 * avg(l_quantity)
+    FROM lineitem
+    WHERE l_partkey = p_partkey   -- ← the correlation
+  );
+```
+
+The outer query has a sensible plan — `part` is small, the
+`(p_brand, p_container)` predicate cuts it to a few hundred rows
+(204 at SF=1), and the join key `l_partkey` has an index. The pain
+is the inner subquery: it computes an average that depends on the
+outer row's `p_partkey`. A naive executor evaluates it **once per
+join-qualifying row**, walking `lineitem` from scratch each time.
+
+PostgreSQL 18's planner does better than naive — it hash-joins `part`
+and `lineitem` first, then only evaluates the SubPlan on rows that
+survive the Hash Join's outer side. Here is what `EXPLAIN (ANALYZE,
+BUFFERS)` actually emits at SF=1:
+
+```
+Aggregate  (actual rows=1.00 loops=1)
+  Buffers: shared hit=237809 read=69794
+  -> Hash Join  (actual rows=587.00 loops=1)
+       Hash Cond: (lineitem.l_partkey = part.p_partkey)
+       Join Filter: (lineitem.l_quantity < (SubPlan 1))
+       Rows Removed by Join Filter: 5501
+       -> Seq Scan on lineitem  (actual rows=6001215.00 loops=1)
+       -> Hash  (actual rows=204.00 loops=1)
+            -> Seq Scan on part
+                 Filter: ((p_brand='Brand#23') AND (p_container='MED BOX'))
+       SubPlan 1
+         -> Aggregate  (actual rows=1.00 loops=6088)
+              -> Bitmap Heap Scan on lineitem lineitem_1
+                   Recheck Cond: (l_partkey = part.p_partkey)
+                   -> Bitmap Index Scan on lineitem_partkey_idx
+                        Index Cond: (l_partkey = part.p_partkey)
+Planning Time: 1.303 ms
+Execution Time: 1731.993 ms
+```
+
+A few things worth pulling out of that:
+
+- The Hash Join produces 6 088 rows that survive the equijoin
+  (`part.p_partkey = lineitem.l_partkey`). The SubPlan is therefore
+  evaluated **6 088 times** — once per Hash-Join candidate — not
+  millions.
+- Each SubPlan execution does a Bitmap Index + Heap Scan on
+  `lineitem` to compute `avg(l_quantity)` for that specific
+  `p_partkey`. Across all 6 088 invocations that's 205 K shared
+  buffer hits *just for the SubPlan*.
+- 5 501 of the 6 088 rows are dropped by `Join Filter:
+  l_quantity < (SubPlan 1)`. So PG is recomputing the average for
+  every Hash-Join row even though most of them will be filtered out
+  by the result.
+
+End-to-end at SF=1: **planning 1.3 ms + execution 1 732 ms =
+1 733.3 ms total**. PG's planner is essentially free here, so wall
+time is the execution number.
+
+## What ORCA does
+
+ORCA reads the same SQL and emits a plan that contains *no correlation
+at runtime*. Here is the same query under `pg_orca` at SF=1:
+
+```
+Aggregate  (actual rows=1.00 loops=1)
+  Buffers: shared hit=17118
+  -> Nested Loop  (actual rows=587.00 loops=1)
+       -> Nested Loop Left Join  (actual rows=204.00 loops=1)
+            -> Seq Scan on part
+                 Filter: ((p_brand='Brand#23') AND (p_container='MED BOX'))
+            -> HashAggregate  (actual rows=1.00 loops=204)
+                 Group Key: lineitem.l_partkey
+                 -> Index Scan using lineitem_partkey_idx on lineitem
+                      Index Cond: (l_partkey = part.p_partkey)
+                      Index Searches: 204
+       -> Index Scan using lineitem_partkey_idx on lineitem lineitem_1
+            Index Cond: (l_partkey = part.p_partkey)
+            Filter: (l_quantity < ((0.2 * (avg(lineitem.l_quantity)))))
+            Rows Removed by Filter: 27
+            Index Searches: 204
+Planning Time: 89.008 ms
+Optimizer: pg_orca
+Execution Time: 70.792 ms
+```
+
+The interesting line is the `HashAggregate` with
+`Group Key: lineitem.l_partkey`. The subquery is gone; in its place is
+a per-partkey aggregate that's computed *once per qualifying part row*
+(`loops=204`) and joined back as a Left Join. The "correlation" — the
+dependency on `p_partkey` — has been turned into a join predicate
+(`l_partkey = part.p_partkey`).
+
+Same data, same indexes, same machine.
+
+End-to-end at SF=1 — and this is the number that actually matters
+for a user issuing the query — is **planning 89.0 ms + execution
+70.8 ms = 159.8 ms total**, compared to PG's
+**1.3 + 1 732.0 = 1 733.3 ms**. That's a **10.8× total-time
+speedup**.
+
+If you ignore planning and only compare execution, ORCA wins by
+24.5× — but ORCA's planner is heavy, and on a 70 ms execution that
+overhead is real. Counting both is the honest number. On longer
+queries (SF=5, SF=10) the planning cost stays roughly constant
+while execution scales linearly, so the headline ratio gets closer
+to the execution-only number again.
+
+The Index Searches counter tells the structural story cleanly: PG
+ran 6 088 SubPlan-side index scans, ORCA ran 204 + 204 = 408 — a
+**15× reduction in index work** — and that's what turns into the
+wall-time win once both planners' costs are paid.
+
+The `Optimizer: pg_orca` line at the bottom is how you confirm that
+ORCA actually produced the plan instead of the fallback path. If
+it's missing, your query hit `standard_planner` for some reason —
+turn on `pg_orca.trace_fallback` and the server log will tell you
+which feature blocked it.
+
+## How the rewrite happens inside ORCA
+
+The transformation has four stages. ORCA's source tree calls them by
+specific names — useful to know if you ever go reading
+`gpopt/xforms/`.
+
+### Stage 1. Lift the subquery into an Apply
+
+When ORCA parses the SQL into its internal algebra, a correlated
+subquery doesn't disappear — it becomes a special operator called an
+**Apply**. Apply is conceptually "for each row on the outer side,
+evaluate the right side parameterised by that row's columns." It looks
+like a join, but it isn't one: the right child can reference outer
+columns directly.
+
+So after `SubqueryHandler` does its initial pass, the algebra tree for
+Q17 contains, roughly:
+
+```
+SELECT (l_quantity < scalar_subq)
+  Apply (correlated columns: {p_partkey})
+    LeftChild:  Join(part, lineitem) on p_partkey = l_partkey, etc.
+    RightChild: Aggregate(avg(l_quantity))
+                  Filter(l_partkey = p_partkey)      ← outer-ref
+                    Get(lineitem)
+```
+
+`SELECT` here is ORCA's term for a filter operator (it's the σ in
+relational algebra). At this point the tree still expresses
+"correlated subquery" — but in a normalised form the rest of the
+optimizer knows how to manipulate.
+
+### Stage 2. Apply2Join — the transformation rule
+
+The Cascades search engine then fires
+`CXformLeftOuterApply2LeftOuterJoin` (and its siblings
+`CXformInnerApply2InnerJoin`,
+`CXformSubqueryUnnest`, etc.). These rules carry a precondition: the
+right child's outer references must be **resolvable as join
+predicates**. For Q17 they are — the `l_partkey = p_partkey` reference
+on the right side is exactly the kind of equijoin predicate the rule
+needs.
+
+After the rule fires, the tree becomes:
+
+```
+SELECT (l_quantity < scalar_subq)
+  LeftOuterJoin   (predicate: lineitem_inner.l_partkey = p_partkey)
+    LeftChild:   Join(part, lineitem)
+    RightChild:  Aggregate(avg(l_quantity))
+                   Get(lineitem)
+```
+
+The outer reference is gone. The "for each outer row, do X" has become
+"join with the aggregated table on p_partkey." This is what the
+literature calls **subquery unnesting**, and the specific transform is
+the one Galindo-Legaria & Joshi formalised in the 2001
+[*Orthogonal Optimization of Subqueries and Aggregation*](https://www.cse.iitb.ac.in/infolab/Data/Courses/CS632/Papers/p571-galindo-legaria.pdf)
+paper that ORCA's design draws on.
+
+### Stage 3. Group-by introduction
+
+Now there's a subtlety. The original subquery computed
+`avg(l_quantity)` for *one specific partkey* — the outer row's. The
+unnested form needs to compute it for *every* partkey, because the
+join filters down to the right one afterward. So ORCA wraps the
+right-side aggregate in a `GROUP BY l_partkey`:
+
+```
+RightChild:  GroupBy l_partkey
+               Aggregate(avg(l_quantity))
+                 Get(lineitem)
+```
+
+That's exactly the `HashAggregate / Group Key: lineitem.l_partkey` you
+see in the final plan. The 200K-times-correlated computation has
+turned into a single grouped aggregate.
+
+### Stage 4. Cost-based selection
+
+The transformation doesn't *replace* the correlated form — it adds
+the unnested form as an alternative in ORCA's Memo. Both shapes are
+costed. For Q17, the unnested form wins by a wide margin because:
+
+- The correlated form, as PG runs it, costs ~6 K SubPlan
+  invocations — each one a bitmap-index + heap scan that touches
+  ~30 lineitem rows — and recomputes the average even for the
+  ~90 % of join-candidate rows the outer filter ends up rejecting.
+- The unnested form computes one grouped aggregate over the
+  qualifying partkeys' lineitem rows, then probes it 204 times via
+  a Nested Loop Left Join driven by the filtered `part` scan.
+
+The cost model — `pg_orca`'s PG-aligned one, driven by the same
+`seq_page_cost`, `random_page_cost`, `cpu_*` constants you tune for
+the built-in planner — sees the second as cheaper and emits it.
+
+For queries where the outer side is very selective and the inner
+expression is cheap to recompute, ORCA will pick the correlated form
+instead. Decorrelation isn't unconditional; it's just an option in the
+plan space.
+
+## Why the speedup doesn't decay
+
+The benchmark numbers on Q17, counting planning + execution as a
+single wall-time number (the latency a user actually sees):
+
+| Scale factor | PG total ms | ORCA total ms | Speedup |
+|---:|---:|---:|---:|
+| SF=1 | 1 733 | 160 | **10.8×** |
+| SF=5 | 7 920 | 472 | **16.8×** |
+| SF=10 | 16 604 | 887 | **18.7×** |
+
+PG's planning time is consistently under 2 ms on this query, so the
+PG number is essentially the execution time. ORCA pays a roughly
+constant **~89 ms** of planning across scale factors — that cost
+dominates at SF=1, where execution is only 71 ms, but becomes a
+small fraction once execution stretches into the hundreds of
+milliseconds.
+
+This shape is the signature of an algorithmic improvement, not a
+constant-factor one: PG's correlated form does ~6 K SubPlan
+invocations at SF=1, scaling linearly with `lineitem`. The
+decorrelated form does one grouped aggregate over the relevant
+slice of `lineitem`, then a 204-row Nested Loop probe back into it.
+When data scales linearly, both sides scale linearly — but the
+constant on the second is much smaller, and stays smaller. That's
+why the wall-time ratio climbs toward ~20× at scale rather than
+decaying toward 1×.
+
+If the gain came from a smarter index or a better cache, the ratio
+would shrink as data grew past memory. It doesn't.
+
+## What this is *not*
+
+A few things worth being precise about:
+
+1. **This isn't magic.** PG's planner has had `pull_up_sublinks`
+   for years and can decorrelate `EXISTS` / `IN` subqueries. What
+   it doesn't have is a general framework for unnesting *scalar*
+   subqueries with aggregates — and Q17's subquery is exactly that
+   shape.
+2. **ORCA pays for it in planning time.** The Q17 plan above shows
+   89 ms of planning — versus 1.3 ms for PG's planner. For a
+   1.7 s query that's a great trade; for a 5 ms point lookup, it
+   isn't. See the
+   [honest disclosure](/#honest) on the home page for the OLTP-side
+   tradeoff.
+3. **ORCA isn't always right.** A few TPC-H queries (Q8 at SF=1,
+   Q11, Q22) currently lose against PG. They're on the
+   [issue tracker](https://github.com/quantumiodb/pgorca/issues) and
+   the focus of the current cost-model calibration pass.
+
+## Try it on your own query
+
+If you have a query whose plan contains a `SubPlan` over an aggregate
+with a correlated index scan underneath, it's a strong candidate.
+Steps:
+
+```sql
+CREATE EXTENSION pg_orca;
+SET pg_orca.enable_orca = on;
+SET pg_orca.trace_fallback = on;   -- log any query ORCA can't handle
+EXPLAIN (ANALYZE, BUFFERS) <your query>;
+```
+
+The line to look for at the bottom of the plan is `Optimizer: pg_orca`.
+If you see `standard_planner` instead, your query hit a fallback path —
+`pg_orca.trace_fallback` will have logged the reason in the server
+log.
+
+For the full GUC surface — choosing the cost model, capping planning
+time, gating per-database — see
+[Configuring pg_orca: a guide to the GUCs you'll actually use](/blog/pg-orca-guc-reference).
+
+## Further reading
+
+- The mechanics of Cascades — Memo, equivalence groups, branch-and-bound
+  pruning — are covered in
+  [ORCA 101: how a Cascades-style optimizer actually works](/blog/orca-101-how-cascades-optimizer-works).
+- The benchmark methodology, hardware, and full per-query numbers for
+  TPC-H and TPC-DS live at [/#benchmarks](/#benchmarks).
+- Source: [`gpopt/xforms/CXformLeftOuterApply2LeftOuterJoin.cpp`](https://github.com/quantumiodb/pgorca)
+  is the actual transformation rule discussed above, if you want to
+  read it.
+
+Bug reports, benchmark runs on your own workloads, and "ORCA picked a
+worse plan than PG on this query, here's the EXPLAIN" issues are all
+very welcome on the [tracker](https://github.com/quantumiodb/pgorca/issues).
