@@ -1,0 +1,197 @@
+---
+title: "pg_orca: a Cascades-style query optimizer for vanilla PostgreSQL 18"
+description: "Introducing pg_orca — a PostgreSQL 18 extension that ports the ORCA Cascades optimizer from Greenplum/HAWQ to upstream Postgres. Includes a TPC-H Q17 walkthrough showing a 20× speedup from automatic subquery decorrelation."
+date: 2026-05-28
+tags: [postgres, orca, pg_orca, cascades, query-optimizer, benchmark]
+author: Jianghua Yang
+---
+
+PostgreSQL's built-in planner is excellent at what it was designed for:
+OLTP and small-to-medium reporting queries. It walks the join tree
+left-deep, uses dynamic programming up to `geqo_threshold` relations,
+and produces near-optimal plans in microseconds. But on analytical
+workloads — many-way joins, correlated subqueries, large aggregations —
+it leaves performance on the table.
+
+`pg_orca` is a PostgreSQL 18 extension that swaps in
+[ORCA](https://15721.courses.cs.cmu.edu/spring2019/papers/22-optimizer1/p337-soliman.pdf),
+the **Cascades-style cost-based optimizer** originally developed at
+Greenplum/Pivotal for MPP analytical workloads in Greenplum and HAWQ.
+It's the same optimizer that powers Apache Cloudberry today, now
+available as a drop-in extension for upstream PostgreSQL — no fork, no
+patched binary, just `CREATE EXTENSION`.
+
+The project is on GitHub:
+[`quantumiodb/pgorca`](https://github.com/quantumiodb/pgorca).
+
+## Why this matters
+
+ORCA's design has three properties that make it interesting for
+analytical Postgres workloads:
+
+1. **Bushy plans.** ORCA enumerates the full join space — left-deep,
+   right-deep, and bushy. PostgreSQL's planner only considers left-deep
+   trees, which can be wildly suboptimal when intermediate result sizes
+   vary by orders of magnitude.
+2. **Subquery decorrelation.** Correlated subqueries that PostgreSQL
+   evaluates row-by-row are rewritten into joins, often turning O(N²)
+   plans into O(N).
+3. **Pluggable cost model.** `pg_orca` ships a PostgreSQL-aligned model
+   that prices plans using the same constants you already tune for the
+   built-in planner (`cpu_operator_cost`, `seq_page_cost`, `work_mem`).
+
+Integration uses `planner_hook`. When ORCA can't handle a query — or
+you turn it off — control returns to `standard_planner` transparently.
+You can ship it into an existing PostgreSQL 18 cluster and gate it
+per-database or per-session.
+
+For the optimizer internals, see
+[ORCA 101: how a Cascades-style optimizer actually works](/blog/orca-101-how-cascades-optimizer-works).
+
+## TPC-H at a glance
+
+Three runs, median, single-node PostgreSQL 18, `cost_model=pg`,
+`max_parallel_workers_per_gather=0`. Speedup is `pg_ms / orca_ms`.
+
+| Query | SF=1 | SF=5 | SF=10 | What ORCA does differently |
+|---|---:|---:|---:|---|
+| **Q17** | **21.4×** | **20.7×** | **20.8×** | Decorrelates the inner `AVG(l_quantity)` subquery |
+| Q20 | 5.1× | 4.4× | 4.5× | Decorrelates `EXISTS` semi-join chain |
+| Q4 | 0.97× | 0.98× | **2.55×** | Picks a bushier join order at scale |
+| Q10 | **2.16×** | 1.52× | 1.54× | Better join ordering |
+| Q18 | 0.89× | 1.56× | 1.45× | Better top-N + aggregate fusion |
+| **Geomean (22 queries)** | **1.21×** | **1.32×** | **1.32×** | |
+
+Honest disclosure: ORCA loses on a few queries today — notably Q8
+(SF=1), Q11, and Q22 (single-column GROUP BY queries where the bushy
+search overhead isn't recovered). Those are tracked
+[on the issue tracker](https://github.com/quantumiodb/pgorca/issues)
+and are the focus of the current cost-model calibration work.
+
+The geomean speedup is real but modest. The headline number is Q17.
+
+## The Q17 story: decorrelation in action
+
+TPC-H Q17 is the canonical Cascades case study. It computes average
+yearly revenue for small-quantity orders of a specific brand and
+container:
+
+```sql
+SELECT sum(l_extendedprice) / 7.0 AS avg_yearly
+FROM lineitem, part
+WHERE p_partkey = l_partkey
+  AND p_brand = 'Brand#23'
+  AND p_container = 'MED BOX'
+  AND l_quantity < (
+    SELECT 0.2 * avg(l_quantity)
+    FROM lineitem
+    WHERE l_partkey = p_partkey   -- ← correlated
+  );
+```
+
+The inner query depends on the outer row's `p_partkey`. A naive
+execution evaluates it once per outer row: scan all of `lineitem`,
+filter, average. For SF=10 (60M lineitem rows, 2M parts), that's
+catastrophic.
+
+### What PostgreSQL's planner does
+
+The built-in planner keeps the subquery correlated and pulls it inside
+a nested loop. It uses the `lineitem_partkey_idx` index per outer row,
+which helps — but you still re-scan the index 200K+ times. At SF=10
+this takes about **17 seconds**.
+
+### What pg_orca does
+
+Here's the plan ORCA produces at SF=1 (full `EXPLAIN (ANALYZE,
+BUFFERS, COSTS ON, SUMMARY ON)` output):
+
+```
+ Result  (cost=0.00..98082.54 rows=1 width=8) (actual rows=1.00 loops=1)
+   Buffers: shared hit=9284 read=7834
+   ->  Aggregate  (cost=0.00..98082.54 rows=1 width=8)
+         ->  Nested Loop  (cost=0.00..98082.53 rows=1 width=8) (actual rows=587.00 loops=1)
+               ->  Nested Loop Left Join  (cost=0.00..50688.85 rows=357 width=12) (actual rows=204.00 loops=1)
+                     ->  Seq Scan on part  (actual rows=204.00 loops=1)
+                           Filter: ((p_brand = 'Brand#23') AND (p_container = 'MED BOX'))
+                           Rows Removed by Filter: 199796
+                     ->  Result  (cost=0.00..137.50 rows=33 width=8) (actual rows=1.00 loops=204)
+                           ->  HashAggregate  (actual rows=1.00 loops=204)
+                                 Group Key: lineitem.l_partkey
+                                 ->  Index Scan using lineitem_partkey_idx on lineitem
+                                       Index Cond: (l_partkey = part.p_partkey)
+               ->  Index Scan using lineitem_partkey_idx on lineitem lineitem_1
+                     Index Cond: (l_partkey = part.p_partkey)
+                     Filter: (l_quantity < ((0.2 * (avg(lineitem.l_quantity)))))
+ Planning Time: 90.940 ms
+ Optimizer: pg_orca
+ Execution Time: 122.818 ms
+```
+
+Two things to notice:
+
+1. The `Optimizer: pg_orca` line at the bottom. That's how you confirm
+   ORCA actually produced the plan; without it, you got the fallback.
+2. The `HashAggregate` with `Group Key: lineitem.l_partkey` sitting
+   above an index probe. ORCA has rewritten the correlated subquery
+   into a per-partkey aggregate, computed once per qualifying `part`
+   row instead of N times across all of `lineitem`. That's
+   decorrelation.
+
+End-to-end: **122 ms vs ~1.6 s**, a **21× speedup** at SF=1. At SF=5
+and SF=10 the ratio holds nearly identically (20.7× and 20.8×), which
+is the signature of an algorithmic improvement — the speedup doesn't
+decay as data grows, because the asymptotic complexity itself changed.
+
+If you want to see the transformation rule that does this — and the
+full four-step Cascades pipeline behind it — that's covered in
+[ORCA 101](/blog/orca-101-how-cascades-optimizer-works#transformation-rules-where-the-search-power-comes-from).
+
+## Try it
+
+`pg_orca` builds against vanilla PostgreSQL 18. Once installed:
+
+```sql
+CREATE EXTENSION pg_orca;
+
+-- Turn it on for this session
+SET pg_orca.enable_orca = on;
+
+-- See which queries fall back to standard_planner
+SET pg_orca.trace_fallback = on;
+
+-- Confirm in EXPLAIN output
+EXPLAIN SELECT ...;     -- look for: Optimizer: pg_orca
+```
+
+To enable it persistently for a workload:
+
+```sql
+ALTER DATABASE warehouse SET pg_orca.enable_orca = on;
+```
+
+The full set of knobs — cost-model selector, join-order algorithm,
+debug prints — is documented in
+[Configuring pg_orca: a guide to the GUCs you'll actually use](/blog/pg-orca-guc-reference).
+
+## Where it goes from here
+
+The current focus areas:
+
+- **Cost-model calibration** to close the gap on the queries where ORCA
+  loses today (Q8, Q11, Q22).
+- **Stats integration** with PostgreSQL extended statistics
+  (`CREATE STATISTICS`), which ORCA currently ignores.
+- **Parallel-aware costing** so plans can exploit `parallel_workers`
+  consistently with the built-in planner.
+
+Contributions, bug reports, and benchmark runs on your own workloads
+are very welcome:
+
+- Repo: [github.com/quantumiodb/pgorca](https://github.com/quantumiodb/pgorca)
+- Issues: [github.com/quantumiodb/pgorca/issues](https://github.com/quantumiodb/pgorca/issues)
+- Full benchmark data: [/#benchmarks](/#benchmarks)
+
+If you've spent time tuning PostgreSQL plans for analytical workloads
+and want a second opinion from a Cascades search, give it a try and
+tell us what you find.
