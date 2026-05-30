@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, JetBrains_Mono } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Nav } from "@/components/nav";
 import { Footer } from "@/components/footer";
@@ -105,6 +106,7 @@ export default function RootLayout({
           <Footer />
         </ThemeProvider>
         <JsonLd />
+        <Analytics />
       </body>
     </html>
   );
