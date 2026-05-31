@@ -61,10 +61,10 @@ export function Install() {
         <div className="mx-auto max-w-2xl text-center">
           <div className="h-eyebrow">Install</div>
           <h2 className="mt-3 h-section">
-            Install pg_orca on PostgreSQL 18 in three steps.
+            Install pg_orca on PostgreSQL 18 or 19-devel in three steps.
           </h2>
           <p className="mt-4 text-lg text-muted">
-            Requires PostgreSQL 18, xerces-c, ICU, CMake ≥ 3.20, and a C++17 compiler.
+            Requires PostgreSQL 18 or 19-devel, xerces-c, ICU, CMake ≥ 3.20, and a C++17 compiler.
             No patches to PostgreSQL itself.
           </p>
         </div>

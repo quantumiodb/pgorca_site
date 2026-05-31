@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "pg_orca — ORCA Query Optimizer for PostgreSQL 18";
+export const alt = "pg_orca — ORCA Query Optimizer for PostgreSQL 18 & 19-devel";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 

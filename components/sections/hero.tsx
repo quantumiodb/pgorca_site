@@ -47,11 +47,11 @@ export function Hero() {
           <h1 className="mt-6 h-display">
             Plug <span className="gradient-text">ORCA</span> into{" "}
             <br className="hidden sm:block" />
-            PostgreSQL 18.
+            PostgreSQL 18 &amp; 19-devel.
           </h1>
 
           <p className="mt-6 max-w-xl text-lg leading-relaxed text-muted">
-            <strong>pg_orca</strong> is a PostgreSQL 18 extension that swaps in the
+            <strong>pg_orca</strong> is a PostgreSQL 18 &amp; 19-devel extension that swaps in the
             ORCA cost-based query optimizer from Greenplum / Apache Cloudberry —
             exhaustive join enumeration, correlated subquery decorrelation, and
             dynamic partition pruning. Installed with a single{" "}
@@ -78,7 +78,7 @@ export function Hero() {
           </div>
 
           <p className="mt-6 text-xs text-muted">
-            MIT-style license · PostgreSQL 18 · macOS &amp; Linux · Auto-fallback on
+            MIT-style license · PostgreSQL 18 &amp; 19-devel · macOS &amp; Linux · Auto-fallback on
             unsupported queries
           </p>
         </div>

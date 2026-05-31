@@ -14,7 +14,7 @@ const faqs: Array<{ q: string; a: string }> = [
   },
   {
     q: "Which PostgreSQL versions are supported?",
-    a: "PostgreSQL 18 only. The extension is built against PG 18's specific planner / executor API.",
+    a: "PostgreSQL 18 and 19-devel. The extension targets PG 18's planner / executor API and tracks the in-development PG 19 branch via PG_VERSION_NUM guards.",
   },
   {
     q: "Is this production-ready?",
@@ -56,7 +56,7 @@ export function JsonLd() {
       url: site.url,
       email: site.email,
     },
-    softwareRequirements: "PostgreSQL 18, xerces-c, ICU, CMake ≥ 3.20, C++17 compiler",
+    softwareRequirements: "PostgreSQL 18 or 19-devel, xerces-c, ICU, CMake ≥ 3.20, C++17 compiler",
     keywords: site.keywords.join(", "),
   };
 
