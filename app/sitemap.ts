@@ -26,42 +26,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.7,
   }));
 
+  // Fragment URLs (e.g. /#benchmarks) are not indexed as standalone pages by
+  // Google — they resolve to the home page. Submitting them in the sitemap
+  // produces "Discovered – not indexed" noise in Search Console without any
+  // SEO upside. The home page's H2 anchors carry the section signal instead.
   return [
     {
       url: site.url,
       lastModified: now,
       changeFrequency: "weekly",
       priority: 1.0,
-    },
-    {
-      url: `${site.url}/#benchmarks`,
-      lastModified: now,
-      changeFrequency: "weekly",
-      priority: 0.9,
-    },
-    {
-      url: `${site.url}/#features`,
-      lastModified: now,
-      changeFrequency: "monthly",
-      priority: 0.8,
-    },
-    {
-      url: `${site.url}/#install`,
-      lastModified: now,
-      changeFrequency: "monthly",
-      priority: 0.8,
-    },
-    {
-      url: `${site.url}/#architecture`,
-      lastModified: now,
-      changeFrequency: "monthly",
-      priority: 0.7,
-    },
-    {
-      url: `${site.url}/#faq`,
-      lastModified: now,
-      changeFrequency: "monthly",
-      priority: 0.7,
     },
     {
       url: `${site.url}/blog`,
