@@ -8,7 +8,7 @@ export const site = {
   // precise-version long-tail keyword still ranks without bloating the
   // snippet.
   description:
-    "PostgreSQL extension that plugs in the ORCA cost-based query optimizer. Up to 254× faster on TPC-H and TPC-DS analytical queries. PostgreSQL 18 & 19-devel, MIT-licensed.",
+    "PostgreSQL extension that plugs in the ORCA cost-based query optimizer from Greenplum. TPC-H and TPC-DS speedups. PostgreSQL 18 & 19-devel, MIT.",
   // Canonical (SEO-indexed) origin. agentml.ai is served globally;
   // quantumio.com.cn is a China-accelerator mirror that serves identical
   // content but is excluded from indexing via the canonical tag below.
