@@ -41,6 +41,16 @@ export function Nav() {
               </Link>
             ))}
           <Link
+            href="/demo"
+            className={`rounded-md px-3 py-1.5 text-sm transition ${
+              pathname.startsWith("/demo")
+                ? "bg-ink-100 text-ink-900 dark:bg-ink-800 dark:text-white"
+                : "text-ink-600 hover:bg-ink-100 hover:text-ink-900 dark:text-ink-300 dark:hover:bg-ink-800 dark:hover:text-white"
+            }`}
+          >
+            Demo
+          </Link>
+          <Link
             href="/blog"
             className={`rounded-md px-3 py-1.5 text-sm transition ${
               pathname.startsWith("/blog")
