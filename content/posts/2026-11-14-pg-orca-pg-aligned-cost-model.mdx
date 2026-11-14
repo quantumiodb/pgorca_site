@@ -1,0 +1,288 @@
+---
+title: "Pricing plans in PostgreSQL's currency: pg_orca's PG-aligned cost model"
+description: "How pg_orca replaced ORCA's Greenplum-calibrated cost model with a port of PostgreSQL's costsize.c: where it plugs in, how it bridges ORCA's total-only costs and rebinds to PostgreSQL's startup costs and loop counts, and how a regression harness keeps both planners within 2%."
+date: 2026-11-14
+tags: [postgres, orca, internals, optimizer]
+author: Jianghua Yang
+---
+
+A Cascades optimizer is a search engine built around one question: *which
+of these equivalent plans is cheapest?* ORCA can enumerate bushy join
+orders, decorrelated subqueries and pushed-down aggregates, but every one of
+those choices is settled by a number the cost model returns. If that number
+is wrong, the search will find the wrong plan very efficiently.
+
+ORCA came out of Greenplum with a cost model calibrated for MPP clusters.
+Its constants are bandwidths and unit costs measured on Greenplum hardware
+(`DSeqIOBandwidth = 1024`, `DTableScanCostUnit = 5.5e-07`, plus send and
+receive costs for every kind of Motion). On a single PostgreSQL node it
+priced plans in a different unit from PostgreSQL. It also ignored the knobs
+DBAs already tune (`random_page_cost`, `work_mem`,
+`effective_cache_size`), and comparing EXPLAINs could not tell you why ORCA
+had picked a plan.
+
+So [`pg_orca`](https://github.com/quantumiodb/pgorca) ships a second cost
+model, `CCostModelPG`, which ports PostgreSQL's `costsize.c` into ORCA one
+operator at a time. It has been the default (`pg_orca.cost_model = pg`)
+since May 2026.
+
+## Where it plugs in
+
+<figure>
+<svg viewBox="0 0 760 330" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="ORCA's search engine calls ICostModel::Cost for each Memo candidate; the pg_orca.cost_model GUC selects CCostModelPG, which reads PostgreSQL's planner cost GUCs directly">
+  <style>{`
+    .box   { fill: none; stroke: currentColor; stroke-width: 1.5; }
+    .hot   { fill: none; stroke: currentColor; stroke-width: 2.5; }
+    .ghost { fill: none; stroke: currentColor; stroke-width: 1.2; stroke-dasharray: 4 3; opacity: 0.45; }
+    .lbl   { fill: currentColor; font: 600 13px ui-monospace, monospace; }
+    .sub   { fill: currentColor; font: 12px ui-sans-serif, system-ui; opacity: 0.75; }
+    .tiny  { fill: currentColor; font: 11px ui-sans-serif, system-ui; opacity: 0.6; }
+    .mono  { fill: currentColor; font: 11.5px ui-monospace, monospace; opacity: 0.85; }
+    .dxl   { fill: currentColor; font: 600 11px ui-monospace, monospace; opacity: 0.85; }
+    .arr   { stroke: currentColor; stroke-width: 1.5; fill: none; marker-end: url(#cm1); }
+    .farr  { stroke: currentColor; stroke-width: 1.2; fill: none; stroke-dasharray: 4 3; opacity: 0.45; marker-end: url(#cm1); }
+    .mid   { text-anchor: middle; }
+    .faint { opacity: 0.45; }
+  `}</style>
+  <defs>
+    <marker id="cm1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" />
+    </marker>
+  </defs>
+
+  {/* Left: ORCA search engine and what it hands the cost model */}
+  <rect className="box" x="20" y="30" width="220" height="260" rx="8" />
+  <text className="lbl" x="36" y="56">ORCA search engine</text>
+  <text className="tiny" x="36" y="74">once per Memo candidate</text>
+  <rect className="box" x="36" y="92" width="188" height="180" rx="6" />
+  <text className="dxl" x="50" y="116">SCostingInfo</text>
+  <text className="sub" x="50" y="144">child total costs</text>
+  <text className="sub" x="50" y="168">row counts · widths</text>
+  <text className="sub" x="50" y="192">rebinds (NL loops)</text>
+  <text className="tiny" x="50" y="252">totals only: no startup cost</text>
+
+  {/* Center: GUC switch and the two implementations */}
+  <rect className="box" x="290" y="30" width="190" height="40" rx="6" />
+  <text className="dxl mid" x="385" y="55">pg_orca.cost_model</text>
+  <path className="arr" d="M 385 70 L 385 98" />
+  <text className="tiny" x="393" y="89">= pg (default)</text>
+  <rect className="hot" x="290" y="100" width="190" height="84" rx="6" />
+  <text className="lbl" x="306" y="126">CCostModelPG</text>
+  <text className="sub" x="306" y="148">port of costsize.c</text>
+  <text className="tiny" x="306" y="168">23 per-operator helpers</text>
+  <rect className="ghost" x="290" y="214" width="190" height="60" rx="6" />
+  <text className="lbl faint" x="306" y="240">CCostModelGPDB</text>
+  <text className="tiny" x="306" y="260">= gpdb · MPP calibration</text>
+
+  <path className="arr" d="M 240 142 L 288 142" />
+  <text className="dxl mid" x="264" y="134">Cost()</text>
+  <path className="farr" d="M 240 244 L 288 244" />
+
+  {/* Right: PostgreSQL's own cost GUCs, read live */}
+  <rect className="box" x="530" y="30" width="210" height="260" rx="8" />
+  <text className="lbl" x="546" y="56">PostgreSQL GUCs</text>
+  <text className="tiny" x="546" y="74">the planner's own globals</text>
+  <text className="mono" x="546" y="104">seq_page_cost</text>
+  <text className="mono" x="546" y="128">random_page_cost</text>
+  <text className="mono" x="546" y="152">cpu_tuple_cost</text>
+  <text className="mono" x="546" y="176">cpu_index_tuple_cost</text>
+  <text className="mono" x="546" y="200">cpu_operator_cost</text>
+  <text className="mono" x="546" y="224">effective_cache_size</text>
+  <text className="mono" x="546" y="248">work_mem</text>
+  <text className="mono" x="546" y="272">hash_mem_multiplier</text>
+  <path className="arr" d="M 530 142 L 482 142" />
+  <text className="dxl mid" x="506" y="134">read</text>
+
+  <text className="sub mid" x="380" y="318">cost(expr) = Σ cost(children) + local(operator)</text>
+</svg>
+<figcaption>ORCA hands each candidate expression's child statistics to whichever cost model the GUC selects. CCostModelPG keeps no constants of its own; it reads PostgreSQL's planner globals at costing time.</figcaption>
+</figure>
+
+ORCA already hides costing behind an `ICostModel` interface. During search,
+the engine calls `Cost(exprhdl, costing_info)` for every candidate physical
+expression in the Memo, passing the children's total costs, row counts,
+widths and rebind counts. `COptTasks::GetCostModel` picks the implementation
+from the GUC.
+
+`CCostModelPG::Cost` keeps PostgreSQL's additive structure: the sum of the
+children's costs plus a local cost for the operator. It dispatches to two
+dozen helpers such as `CostScan`, `CostIndexScan`, `CostHashJoin`,
+`CostNLJoin`, `CostHashAgg`, `CostSort` and `CostLimit`. It does not keep
+its own copy of the cost constants. It declares PostgreSQL's planner globals
+`extern "C"` and reads them live, so `SET random_page_cost = 1.1` shifts
+ORCA's choice between index scan and seq scan just as it shifts
+PostgreSQL's.
+
+## Porting costsize.c, one operator at a time
+
+Most helpers translate PostgreSQL's code directly. Here is the scan from
+PostgreSQL's own EXPLAIN documentation:
+
+<figure>
+<svg viewBox="0 0 760 250" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="ORCA costs a Filter over a TableScan as 25.00 plus 445.00; PostgreSQL prints a single Seq Scan node costing 470.00">
+  <style>{`
+    .box  { fill: none; stroke: currentColor; stroke-width: 1.5; }
+    .edge { stroke: currentColor; stroke-width: 1.5; opacity: 0.6; }
+    .lbl  { fill: currentColor; font: 600 13px ui-monospace, monospace; }
+    .sub  { fill: currentColor; font: 12px ui-sans-serif, system-ui; opacity: 0.75; }
+    .tiny { fill: currentColor; font: 11px ui-sans-serif, system-ui; opacity: 0.6; }
+    .mono { fill: currentColor; font: 12px ui-monospace, monospace; opacity: 0.9; }
+    .hl   { font-weight: 700; opacity: 1; }
+    .arr  { stroke: currentColor; stroke-width: 1.5; fill: none; marker-end: url(#cm2); }
+    .mid  { text-anchor: middle; }
+  `}</style>
+  <defs>
+    <marker id="cm2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" />
+    </marker>
+  </defs>
+
+  {/* Left: ORCA's two physical operators */}
+  <text className="lbl" x="20" y="28">ORCA physical plan</text>
+  <rect className="box" x="20" y="44" width="320" height="64" rx="6" />
+  <text className="lbl" x="36" y="70">{"Filter · unique1 < 7000"}</text>
+  <text className="sub" x="36" y="94">0.0025 × 1 op × 10,000 rows = 25.00</text>
+  <line className="edge" x1="180" y1="108" x2="180" y2="134" />
+  <rect className="box" x="20" y="134" width="320" height="64" rx="6" />
+  <text className="lbl" x="36" y="160">TableScan · tenk1</text>
+  <text className="sub" x="36" y="184">345 pages × 1.0 + 10,000 × 0.01 = 445.00</text>
+  <text className="mono" x="20" y="232">Σ = 445.00 + 25.00 = <tspan className="hl">470.00</tspan></text>
+
+  {/* Middle */}
+  <path className="arr" d="M 352 121 L 408 121" />
+  <text className="tiny mid" x="380" y="111">same total</text>
+
+  {/* Right: what PostgreSQL's planner prints */}
+  <text className="lbl" x="420" y="28">PostgreSQL planner</text>
+  <rect className="box" x="420" y="44" width="320" height="154" rx="6" />
+  <text className="mono" x="436" y="78">Seq Scan on tenk1</text>
+  <text className="mono" x="452" y="102">(cost=0.00..<tspan className="hl">470.00</tspan> rows=7000)</text>
+  <text className="mono" x="452" y="126">{"Filter: (unique1 < 7000)"}</text>
+  <text className="tiny" x="436" y="178">one node: scan and qual together</text>
+</svg>
+<figcaption>The tenk1 example from PostgreSQL's EXPLAIN chapter: 345 pages, 10,000 rows, default cost constants. ORCA gives the qual its own Filter operator, and the two local costs add up to the cost of PostgreSQL's single node.</figcaption>
+</figure>
+
+ORCA models `WHERE unique1 < 7000` as a Filter operator above the scan,
+while PostgreSQL attaches the qual to the scan node. `CostScan` charges
+`cost_seqscan`'s page I/O and per-tuple CPU (445.00). `CostFilter` charges
+one `cpu_operator_cost` per qual operator per input row (25.00). The sum is
+the 470.00 that PostgreSQL prints.
+
+The larger operators bring more of PostgreSQL's detail with them. Hash
+joins separate hash clauses from residual quals and take bucket sizes from
+histograms. HashAgg models spilling with `hash_agg_entry_size` against
+`work_mem × hash_mem_multiplier`. Sort derives its merge order from
+`work_mem`, and btree scans get the real tree height through
+`amgettreeheight`.
+
+## Where the two models disagree
+
+The formulas were the easy part. The hard part is that ORCA and PostgreSQL
+describe a plan differently. Three gaps come up again and again in the 53
+commits on `CCostModelPG.cpp`.
+
+**No startup cost.** PostgreSQL tracks `startup_cost` and `total_cost`
+separately, and `LIMIT` needs both: `startup + (total − startup) ×
+fraction`. ORCA reports only a child's total. `CostLimit` estimates the run
+portion from the type of the child: a Sort's cost is almost all startup,
+and an IndexScan's is almost none.
+
+**Rebinds instead of loop counts.** ORCA prices the inner side of a nested
+loop by multiplying it by the number of rebinds. PostgreSQL's `cost_index`
+uses `loop_count` instead, and spreads heap I/O across repeated probes with
+the Mackert–Lohman formula, because later probes find pages already cached.
+`CostIndexScan` passes ORCA's rebind count in as `loop_count`.
+
+**Early termination.** A semi or anti join stops at the first match.
+Following `final_cost_nestloop`, `CostNLJoin` charges each matched outer
+row only `2 / (match_count + 1)` of an inner scan. Without this, an `EXISTS`
+in the style of TPC-H Q4, with an indexed inner, came out about 3× too
+expensive. That pushed ORCA toward hashing the whole inner side and
+deduplicating it.
+
+## Keeping it honest
+
+<figure>
+<svg viewBox="0 0 760 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="cost_align runs 311 EXPLAINs through both planners; 188 pick the same plan, 183 of them within 2 percent; 123 pick a different plan">
+  <style>{`
+    .box  { fill: none; stroke: currentColor; stroke-width: 1.5; }
+    .hot  { fill: none; stroke: currentColor; stroke-width: 2.5; }
+    .lbl  { fill: currentColor; font: 600 13px ui-monospace, monospace; }
+    .sub  { fill: currentColor; font: 12px ui-sans-serif, system-ui; opacity: 0.75; }
+    .tiny { fill: currentColor; font: 11px ui-sans-serif, system-ui; opacity: 0.6; }
+    .dxl  { fill: currentColor; font: 600 11px ui-monospace, monospace; opacity: 0.85; }
+    .arr  { stroke: currentColor; stroke-width: 1.5; fill: none; marker-end: url(#cm3); }
+    .mid  { text-anchor: middle; }
+  `}</style>
+  <defs>
+    <marker id="cm3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" />
+    </marker>
+  </defs>
+
+  <rect className="box" x="20" y="95" width="150" height="60" rx="6" />
+  <text className="dxl mid" x="95" y="120">cost_align.sql</text>
+  <text className="tiny mid" x="95" y="140">311 EXPLAINs</text>
+
+  <rect className="box" x="215" y="30" width="180" height="56" rx="6" />
+  <text className="lbl mid" x="305" y="54">PostgreSQL</text>
+  <text className="tiny mid" x="305" y="74">pg_orca.enable_orca = off</text>
+  <rect className="box" x="215" y="164" width="180" height="56" rx="6" />
+  <text className="lbl mid" x="305" y="188">ORCA</text>
+  <text className="tiny mid" x="305" y="208">pg_orca.cost_model = pg</text>
+
+  <path className="arr" d="M 170 112 L 213 64" />
+  <path className="arr" d="M 170 138 L 213 186" />
+
+  <rect className="box" x="430" y="95" width="130" height="60" rx="30" />
+  <text className="sub mid" x="495" y="121">same top</text>
+  <text className="sub mid" x="495" y="139">operator?</text>
+  <path className="arr" d="M 395 58 L 432 108" />
+  <path className="arr" d="M 395 192 L 432 142" />
+
+  <rect className="hot" x="605" y="20" width="140" height="96" rx="6" />
+  <text className="lbl" x="619" y="44">same plan</text>
+  <text className="sub" x="619" y="68">183 within 2%</text>
+  <text className="sub" x="619" y="90">5 outside: fail</text>
+  <rect className="box" x="605" y="140" width="140" height="80" rx="6" />
+  <text className="lbl" x="619" y="164">different plan</text>
+  <text className="sub" x="619" y="188">123 reported</text>
+  <text className="tiny" x="619" y="208">not a failure</text>
+
+  <path className="arr" d="M 560 112 L 603 70" />
+  <text className="tiny" x="584" y="102">yes</text>
+  <path className="arr" d="M 560 138 L 603 178" />
+  <text className="tiny" x="586" y="150">no</text>
+</svg>
+<figcaption>test/cost_align.sh in the pg_orca repo. Same-shape plans must agree on cost within 2%. Different plans are listed for inspection, because they come from ORCA's larger search space rather than from a pricing bug. Counts are from the latest runs quoted in the commit log.</figcaption>
+</figure>
+
+A cost model that is "PG-aligned" only in its comments drifts quickly.
+`test/cost_align.sh` runs 311 EXPLAINs twice, once through PostgreSQL's
+planner and once through ORCA with `cost_model = pg`. When both pick the
+same top operator, their costs must agree within 2%. Today 183 of those 188
+plans do. Commit messages for cost changes routinely quote the before and
+after counts.
+
+Aligning the costs also changed which plans ORCA was willing to pick.
+PostgreSQL prices a CTE Scan very cheaply. Once ORCA used the same price, it
+began choosing a Merge Join over two CTE Scans, a plan the Greenplum
+calibration had always priced out. PostgreSQL's CTE Scan can't mark and
+restore its position, which a merge join's inner side needs, so that plan
+crashed. The fix belonged in ORCA's property derivation rather than in the
+cost model, and it shows the general lesson: a new cost model opens new
+regions of the search space, and the tests have to follow.
+
+## Why it matters
+
+When both planners price plans the same way, a `pg_orca` EXPLAIN reads like
+a PostgreSQL EXPLAIN. A cost of 470 means the same thing in both, and your
+tuning carries over. When ORCA still picks a different plan, the cause is a
+different search space or a different row estimate, not a different
+exchange rate, and that makes the plan much easier to debug.
+
+To switch models or review the related settings, see
+[Configuring pg_orca](/blog/pg-orca-guc-reference). For how the cost model
+fits into Memo search, see
+[ORCA 101](/blog/orca-101-how-cascades-optimizer-works).
