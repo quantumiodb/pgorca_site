@@ -168,9 +168,11 @@ full join space under ORCA's cardinality model, including bushy plans. The
 join-order search threshold is controlled internally by
 `optimizer_join_order_threshold` (default 10).
 
-PostgreSQL's comparison: `geqo_threshold = 12` switches to a genetic algorithm
-above 12 relations; below it, the greedy DP is left-deep biased. Neither path
-searches bushy plans aggressively.
+PostgreSQL's comparison: below `geqo_threshold = 12` its dynamic programming
+also builds bushy trees, but only between join rels linked by a join clause;
+at 12+ relations it switches to a genetic algorithm. Subquery pull-up and
+aggregate placement are fixed before PostgreSQL's join search starts, whereas
+ORCA costs them in the same Memo as the join order.
 
 ### 4.3 Robust statistics propagation
 
@@ -344,8 +346,8 @@ published to Planet PostgreSQL).
 
 *Published 2026-05-28 by Jianghua Yang. Tags: postgres, orca, internals, optimizer. Source: https://agentml.ai/blog/orca-101-how-cascades-optimizer-works*
 
-PostgreSQL's planner is a finely tuned thing. It walks the join tree
-left-deep, uses dynamic programming up to `geqo_threshold` relations, and
+PostgreSQL's planner is a finely tuned thing. It builds join trees
+bottom-up with dynamic programming up to `geqo_threshold` relations, and
 falls back to a genetic algorithm beyond that. For OLTP and most reporting
 queries, it produces near-optimal plans in microseconds.
 
@@ -425,10 +427,13 @@ For a five-way join, the Memo will end up holding hundreds of
 algebraically-equivalent join trees — left-deep, right-deep, bushy,
 reordered — without ever materializing them as separate plan trees.
 
-This is the single biggest win over PostgreSQL's planner: ORCA considers
-**bushy plans**. PostgreSQL only generates left-deep joins, which leaves
-performance on the table for analytical queries where intermediate result
-sizes vary by orders of magnitude.
+PostgreSQL's planner considers bushy trees too: `join_search_one_level()`
+joins multi-relation join rels to each other whenever a join clause links
+them. The difference is *where* ORCA keeps its alternatives. Join
+reordering shares the Memo with every other rewrite, so decorrelated
+subqueries, aggregates pushed below joins and reordered joins all land in
+the same groups and are costed against each other. PostgreSQL settles
+subquery pull-up and aggregate placement before its join search starts.
 
 ### Step 2 — Statistics derivation: cardinality estimation
 
@@ -544,8 +549,8 @@ library, but they never fire because the property framework never demands
 the distribution properties they satisfy.
 
 In other words: ORCA on PostgreSQL is the same optimizer with a tighter
-cost model. The bushy plans, the decorrelation, the exhaustive join search
-— that's all still there. That's why `pg_orca` can find plans the
+cost model. The Memo, the decorrelation, the cost-based join search —
+that's all still there. That's why `pg_orca` can find plans the
 PostgreSQL planner can't, even on a laptop.
 
 ---
@@ -562,8 +567,9 @@ and the [SIGMOD 2014 paper](https://15721.courses.cs.cmu.edu/spring2019/papers/2
 
 `pg_orca` is a PostgreSQL 18 extension that swaps in the ORCA cost-based
 query optimizer for analytical queries. When enabled, ORCA generates
-plans that PostgreSQL's built-in planner won't — bushy joins,
-decorrelated subqueries, ahead-of-time partition pruning — and prices
+plans that PostgreSQL's built-in planner won't — decorrelated
+subqueries, aggregates pushed below joins, ahead-of-time partition
+pruning — and prices
 them with a PostgreSQL-aligned cost model.
 
 The extension exposes about thirty configuration parameters. Most users
@@ -625,9 +631,11 @@ have no effect. See *Legacy parameters* below.
 
 ## Controlling join-order search
 
-This is where pg_orca diverges most visibly from PostgreSQL's planner.
-ORCA searches a much larger space of join orderings, including bushy
-trees that PostgreSQL never considers.
+Both planners explore bushy join trees; they differ in how they search.
+PostgreSQL runs dynamic programming over join rels linked by join
+clauses and switches to GEQO at `geqo_threshold`. ORCA enumerates join
+orders inside its Memo, alongside its other rewrites, using the
+algorithm selected below.
 
 ### `optimizer_join_order` · default `exhaustive2` · `USERSET`
 

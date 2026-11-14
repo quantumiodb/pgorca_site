@@ -8,8 +8,9 @@ author: Jianghua Yang
 
 `pg_orca` is a PostgreSQL 18 extension that swaps in the ORCA cost-based
 query optimizer for analytical queries. When enabled, ORCA generates
-plans that PostgreSQL's built-in planner won't — bushy joins,
-decorrelated subqueries, ahead-of-time partition pruning — and prices
+plans that PostgreSQL's built-in planner won't — decorrelated
+subqueries, aggregates pushed below joins, ahead-of-time partition
+pruning — and prices
 them with a PostgreSQL-aligned cost model. If you're new to how ORCA
 makes its decisions, the companion post
 [ORCA 101: How a Cascades-style optimizer actually works](/blog/orca-101-how-cascades-optimizer-works)
@@ -74,9 +75,11 @@ have no effect. See *Legacy parameters* below.
 
 ## Controlling join-order search
 
-This is where pg_orca diverges most visibly from PostgreSQL's planner.
-ORCA searches a much larger space of join orderings, including bushy
-trees that PostgreSQL never considers.
+Both planners explore bushy join trees; they differ in how they search.
+PostgreSQL runs dynamic programming over join rels linked by join
+clauses and switches to GEQO at `geqo_threshold`. ORCA enumerates join
+orders inside its Memo, alongside its other rewrites, using the
+algorithm selected below.
 
 ### `optimizer_join_order` · default `exhaustive2` · `USERSET`
 

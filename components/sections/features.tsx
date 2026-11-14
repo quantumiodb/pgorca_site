@@ -16,7 +16,7 @@ const features = [
     icon: Network,
     title: "Exhaustive join-order enumeration (DPv2)",
     tag: "Bushy plans, cost-driven",
-    body: "CJoinOrderDPv2 + commutativity / associativity xforms enumerate the full join space under ORCA's own cardinality model — bushy and left-deep alike. PG's GEQO is a fallback above 12 relations; this is dynamic programming all the way through.",
+    body: "CJoinOrderDPv2 + commutativity / associativity xforms enumerate the full join space under ORCA's own cardinality model — bushy and left-deep alike, costed in the same Memo as decorrelation and aggregate pushdown.",
     example: {
       query: "TPC-DS Q25",
       detail: "6-way roll-up join across store_sales × store_returns × catalog_sales × …",

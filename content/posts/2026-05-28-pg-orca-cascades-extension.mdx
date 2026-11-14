@@ -7,8 +7,8 @@ author: Jianghua Yang
 ---
 
 PostgreSQL's built-in planner is excellent at what it was designed for:
-OLTP and small-to-medium reporting queries. It walks the join tree
-left-deep, uses dynamic programming up to `geqo_threshold` relations,
+OLTP and small-to-medium reporting queries. It builds join trees
+bottom-up with dynamic programming up to `geqo_threshold` relations,
 and produces near-optimal plans in microseconds. But on analytical
 workloads — many-way joins, correlated subqueries, large aggregations —
 it leaves performance on the table.
@@ -29,10 +29,12 @@ The project is on GitHub:
 ORCA's design has three properties that make it interesting for
 analytical Postgres workloads:
 
-1. **Bushy plans.** ORCA enumerates the full join space — left-deep,
-   right-deep, and bushy. PostgreSQL's planner only considers left-deep
-   trees, which can be wildly suboptimal when intermediate result sizes
-   vary by orders of magnitude.
+1. **One search space for joins and rewrites.** ORCA explores
+   left-deep, right-deep and bushy join orders in the same Memo as its
+   other rewrites. PostgreSQL's dynamic-programming search builds bushy
+   trees too, but it settles subquery pull-up and aggregate placement
+   before join search starts; ORCA costs those choices together with
+   the join order.
 2. **Subquery decorrelation.** Correlated subqueries that PostgreSQL
    evaluates row-by-row are rewritten into joins, often turning O(N²)
    plans into O(N).

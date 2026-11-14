@@ -3,10 +3,10 @@ import { GitBranch, Layers, LayoutGrid } from "lucide-react";
 const items = [
   {
     icon: GitBranch,
-    title: "Heuristic join enumeration",
-    body: "PostgreSQL switches to a genetic algorithm at 12+ relations (geqo_threshold). Below that, it greedily prefers left-deep trees. Neither path searches the bushy plan space — and both are sensitive to the planner's row estimates.",
+    title: "Bounded join search",
+    body: "PostgreSQL's dynamic programming does build bushy trees, but only between relations linked by a join clause, and it switches to a genetic algorithm at 12+ relations (geqo_threshold). Subquery pull-up and aggregate placement are fixed before join search starts, and every choice rides on the planner's row estimates.",
     snippet: `-- 6+ way joins like TPC-DS Q25
--- left-deep tree picked even when bushy is dramatically cheaper
+-- join order hinges on intermediate row estimates
 SELECT ... FROM store_sales
   JOIN store_returns ON ...
   JOIN catalog_sales ON ...

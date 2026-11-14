@@ -6,8 +6,8 @@ tags: [postgres, orca, internals, optimizer]
 author: Jianghua Yang
 ---
 
-PostgreSQL's planner is a finely tuned thing. It walks the join tree
-left-deep, uses dynamic programming up to `geqo_threshold` relations, and
+PostgreSQL's planner is a finely tuned thing. It builds join trees
+bottom-up with dynamic programming up to `geqo_threshold` relations, and
 falls back to a genetic algorithm beyond that. For OLTP and most reporting
 queries, it produces near-optimal plans in microseconds.
 
@@ -162,10 +162,13 @@ For a five-way join, the Memo will end up holding hundreds of
 algebraically-equivalent join trees — left-deep, right-deep, bushy,
 reordered — without ever materializing them as separate plan trees.
 
-This is the single biggest win over PostgreSQL's planner: ORCA considers
-**bushy plans**. PostgreSQL only generates left-deep joins, which leaves
-performance on the table for analytical queries where intermediate result
-sizes vary by orders of magnitude.
+PostgreSQL's planner considers bushy trees too: `join_search_one_level()`
+joins multi-relation join rels to each other whenever a join clause links
+them. The difference is *where* ORCA keeps its alternatives. Join
+reordering shares the Memo with every other rewrite, so decorrelated
+subqueries, aggregates pushed below joins and reordered joins all land in
+the same groups and are costed against each other. PostgreSQL settles
+subquery pull-up and aggregate placement before its join search starts.
 
 ### Step 2 — Statistics derivation: cardinality estimation
 
@@ -313,8 +316,8 @@ library, but they never fire because the property framework never demands
 the distribution properties they satisfy.
 
 In other words: ORCA on PostgreSQL is the same optimizer with a tighter
-cost model. The bushy plans, the decorrelation, the exhaustive join search
-— that's all still there. That's why `pg_orca` can find plans the
+cost model. The Memo, the decorrelation, the cost-based join search —
+that's all still there. That's why `pg_orca` can find plans the
 PostgreSQL planner can't, even on a laptop.
 
 ## Next: configuring it
