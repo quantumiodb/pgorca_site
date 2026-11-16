@@ -58,7 +58,7 @@ export function Install() {
   return (
     <section id="install" className="section border-t border-ink-200/60 dark:border-ink-800/60">
       <div className="container-narrow">
-        <div className="mx-auto max-w-2xl text-center">
+        <div className="max-w-2xl">
           <div className="h-eyebrow">Install</div>
           <h2 className="mt-3 h-section">
             Install pg_orca on PostgreSQL 18 or 19-devel in three steps.
@@ -69,7 +69,7 @@ export function Install() {
           </p>
         </div>
 
-        <div className="mt-12 space-y-6">
+        <div className="mt-12 border-b border-ink-200 dark:border-ink-800">
           {/* Step 1 */}
           <Step n={1} title="Install dependencies">
             <div className="mb-3 inline-flex rounded-lg border border-ink-200 bg-white p-1 text-sm dark:border-ink-800 dark:bg-ink-900">
@@ -90,8 +90,8 @@ export function Install() {
           </Step>
         </div>
 
-        <div className="mt-10 rounded-2xl border border-brand-300/40 bg-brand-50/40 p-6 text-sm dark:border-brand-800/40 dark:bg-brand-950/30">
-          <p className="font-mono text-xs uppercase tracking-[0.15em] text-brand-700 dark:text-brand-300">
+        <div className="mt-10 border-l-2 border-brand-500 bg-brand-50/60 p-6 text-sm dark:border-brand-800/40 dark:bg-brand-950/30">
+          <p className="text-sm font-semibold text-brand-700 dark:text-brand-300">
             Why session_preload_libraries, not shared_preload_libraries
           </p>
           <p className="mt-2 text-ink-800 dark:text-ink-200">
@@ -108,7 +108,7 @@ export function Install() {
         </div>
 
         <div className="mt-6 rounded-2xl border border-ink-200/70 bg-white p-6 dark:border-ink-800 dark:bg-ink-900/40">
-          <p className="font-mono text-xs uppercase tracking-[0.15em] text-ink-500 dark:text-ink-400">
+          <p className="text-sm font-semibold text-ink-900 dark:text-ink-100">
             Alternative scopes
           </p>
           <p className="mt-2 mb-4 text-sm text-muted">
@@ -123,14 +123,12 @@ export function Install() {
 
 function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-ink-200/70 bg-white p-6 dark:border-ink-800 dark:bg-ink-900/40">
-      <div className="flex items-center gap-3">
-        <div className="grid size-8 place-items-center rounded-full bg-gradient-to-br from-brand-500 to-accent-500 font-mono text-sm font-bold text-white">
-          {n}
-        </div>
-        <h3 className="text-lg font-semibold">{title}</h3>
-      </div>
-      <div className="mt-5">{children}</div>
+    <div className="grid gap-x-12 gap-y-4 border-t border-ink-200 py-8 dark:border-ink-800 lg:grid-cols-[15rem_1fr]">
+      <h3 className="flex items-baseline gap-3 text-lg font-semibold">
+        <span className="font-mono text-brand-500 dark:text-brand-300">{n}.</span>
+        {title}
+      </h3>
+      <div className="min-w-0">{children}</div>
     </div>
   );
 }
@@ -152,7 +150,7 @@ function OsTab({
       className={cn(
         "inline-flex items-center gap-2 rounded-md px-3 py-1.5 font-medium transition",
         active
-          ? "bg-ink-900 text-white shadow-sm dark:bg-white dark:text-ink-900"
+          ? "bg-brand-500 text-white dark:bg-brand-400 dark:text-ink-950"
           : "text-ink-600 hover:text-ink-900 dark:text-ink-300 dark:hover:text-white",
       )}
     >

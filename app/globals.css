@@ -4,21 +4,21 @@
 
 @layer base {
   :root {
-    --bg: 246 247 249;
-    --fg: 16 20 42;
-    --muted: 124 133 151;
-    --border: 213 217 224;
+    --bg: 255 255 255;
+    --fg: 18 34 47;
+    --muted: 82 112 137;
+    --border: 208 219 229;
     --card: 255 255 255;
-    --code-bg: 16 20 42;
+    --code-bg: 15 34 51;
   }
 
   .dark {
-    --bg: 8 10 26;
-    --fg: 246 247 249;
-    --muted: 124 133 151;
-    --border: 42 49 71;
-    --card: 16 20 42;
-    --code-bg: 8 10 26;
+    --bg: 11 23 34;
+    --fg: 232 238 243;
+    --muted: 143 166 184;
+    --border: 28 47 65;
+    --card: 18 34 47;
+    --code-bg: 7 16 24;
   }
 
   html {
@@ -28,13 +28,12 @@
   body {
     background-color: rgb(var(--bg));
     color: rgb(var(--fg));
-    font-feature-settings: "ss01", "cv11";
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
 
   ::selection {
-    background-color: rgb(53 99 246 / 0.25);
+    background-color: rgb(51 103 145 / 0.28);
   }
 }
 
@@ -48,15 +47,19 @@
   }
 
   .h-display {
-    @apply text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tight leading-[1.05];
+    @apply text-4xl sm:text-5xl lg:text-[3.5rem] font-semibold tracking-tight leading-[1.08];
   }
 
   .h-section {
-    @apply text-3xl sm:text-4xl font-bold tracking-tight;
+    @apply text-3xl sm:text-4xl font-semibold tracking-tight;
   }
 
   .h-eyebrow {
-    @apply text-xs font-mono uppercase tracking-[0.15em] text-accent-500;
+    /* Section labels read as SQL comments: "-- benchmarks". */
+    @apply text-sm font-mono lowercase text-brand-500 dark:text-brand-300;
+  }
+  .h-eyebrow::before {
+    content: "-- ";
   }
 
   .text-muted {
@@ -75,10 +78,12 @@
   }
 
   .gradient-text {
-    background: linear-gradient(135deg, #5b87ff 0%, #f97316 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
+    @apply text-brand-500 dark:text-brand-300;
+  }
+
+  :focus-visible {
+    outline: 2px solid #0085b0;
+    outline-offset: 2px;
   }
 }
 
@@ -92,7 +97,7 @@
   margin-top: 1.25em;
 }
 .prose-pgorca h2 {
-  @apply mt-14 mb-4 text-2xl font-bold tracking-tight;
+  @apply mt-14 mb-4 border-b border-ink-200 pb-2 text-2xl font-semibold tracking-tight text-brand-600 dark:border-ink-800 dark:text-brand-300;
   scroll-margin-top: 5rem;
 }
 .prose-pgorca h3 {
@@ -106,11 +111,11 @@
 }
 .prose-pgorca h2 .heading-anchor:hover,
 .prose-pgorca h3 .heading-anchor:hover {
-  color: rgb(53 99 246);
+  color: rgb(51 103 145);
 }
 .dark .prose-pgorca h2 .heading-anchor:hover,
 .dark .prose-pgorca h3 .heading-anchor:hover {
-  color: rgb(142 177 255);
+  color: rgb(134 178 210);
 }
 .prose-pgorca p {
   color: rgb(var(--fg));
@@ -136,7 +141,7 @@
   margin: 0;
 }
 .prose-pgorca blockquote {
-  border-left: 3px solid rgb(var(--border));
+  border-left: 3px solid #336791;
   padding-left: 1rem;
   color: rgb(var(--muted));
   font-style: italic;
@@ -163,7 +168,7 @@
   color: var(--shiki-dark);
 }
 .prose-pgorca pre code {
-  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-family: var(--font-mono), ui-monospace, monospace;
   background: transparent;
   padding: 0;
 }

@@ -44,20 +44,20 @@ export function Faq() {
   return (
     <section id="faq" className="section border-t border-ink-200/60 dark:border-ink-800/60">
       <div className="container-narrow">
-        <div className="mx-auto max-w-2xl text-center">
+        <div className="max-w-2xl">
           <div className="h-eyebrow">FAQ</div>
           <h2 className="mt-3 h-section">
             pg_orca FAQ — install, compatibility, license.
           </h2>
         </div>
 
-        <div className="mx-auto mt-12 max-w-3xl divide-y divide-ink-200/60 overflow-hidden rounded-2xl border border-ink-200/70 bg-white dark:divide-ink-800 dark:border-ink-800 dark:bg-ink-900/40">
+        <div className="mt-12 max-w-3xl divide-y divide-ink-200/60 overflow-hidden rounded-2xl border border-ink-200/70 bg-white dark:divide-ink-800 dark:border-ink-800 dark:bg-ink-900/40">
           {faqs.map((f, i) => (
             <FaqItem key={f.q} q={f.q} a={f.a} initiallyOpen={i === 0} />
           ))}
         </div>
 
-        <div className="mx-auto mt-12 max-w-3xl overflow-hidden rounded-2xl border border-ink-200/70 bg-gradient-to-br from-white to-brand-50/40 p-8 dark:border-ink-800 dark:from-ink-900 dark:to-brand-950/30">
+        <div className="mt-12 max-w-3xl overflow-hidden rounded-2xl border border-ink-200/70 bg-brand-50/60 p-8 dark:border-ink-800 dark:bg-ink-900/60">
           <div className="flex flex-col items-start justify-between gap-6 sm:flex-row sm:items-center">
             <div>
               <div className="h-eyebrow">Get in touch</div>
@@ -72,7 +72,7 @@ export function Faq() {
             <div className="flex flex-col gap-2 sm:items-end">
               <a
                 href={`mailto:${site.email}`}
-                className="inline-flex items-center gap-2 rounded-md bg-ink-900 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-ink-800 dark:bg-white dark:text-ink-900 dark:hover:bg-ink-100"
+                className="inline-flex items-center gap-2 rounded-md bg-brand-500 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-brand-600 dark:bg-brand-400 dark:text-ink-950 dark:hover:bg-brand-300"
               >
                 <Mail className="size-4" />
                 {site.email}

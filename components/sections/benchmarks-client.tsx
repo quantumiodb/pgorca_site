@@ -56,7 +56,7 @@ export function BenchmarksClient({ workloads }: Props) {
                 className={cn(
                   "rounded-md px-3 py-1.5 font-medium transition",
                   active === w.id
-                    ? "bg-ink-900 text-white shadow-sm dark:bg-white dark:text-ink-900"
+                    ? "bg-brand-500 text-white dark:bg-brand-400 dark:text-ink-950"
                     : "text-ink-600 hover:text-ink-900 dark:text-ink-300 dark:hover:text-white",
                 )}
               >
@@ -70,7 +70,7 @@ export function BenchmarksClient({ workloads }: Props) {
           {/* Bar chart */}
           <div className="rounded-2xl border border-ink-200/70 bg-white p-6 dark:border-ink-800 dark:bg-ink-900/40">
             <div className="flex items-center justify-between text-xs text-muted">
-              <span className="font-mono uppercase tracking-[0.15em]">
+              <span className="font-medium text-ink-700 dark:text-ink-200">
                 Speedup vs PostgreSQL 18 (×, log scale)
               </span>
               <span className="font-mono">par = 0</span>
@@ -96,8 +96,8 @@ export function BenchmarksClient({ workloads }: Props) {
                         className={cn(
                           "absolute inset-y-0 left-0 rounded transition-all",
                           win
-                            ? "bg-gradient-to-r from-brand-500 to-accent-500"
-                            : "bg-gradient-to-r from-rose-500/70 to-rose-400/70",
+                            ? "bg-brand-500 dark:bg-brand-400"
+                            : "bg-rose-500/75",
                         )}
                         style={{ width: `${Math.max(width, 5)}%` }}
                         title={labelText}
@@ -138,7 +138,7 @@ export function BenchmarksClient({ workloads }: Props) {
 
           {/* Right: summary stats */}
           <div className="flex flex-col gap-4">
-            <div className="rounded-2xl border border-ink-200/70 bg-gradient-to-br from-white to-brand-50/40 p-6 dark:border-ink-800 dark:from-ink-900 dark:to-brand-950/30">
+            <div className="rounded-2xl border border-ink-200/70 bg-brand-50/60 p-6 dark:border-ink-800 dark:bg-ink-900/60">
               <div className="h-eyebrow">Overall</div>
               <p className="mt-3 text-base leading-relaxed text-ink-900 dark:text-ink-100">
                 {data.totalSummary}
@@ -150,7 +150,7 @@ export function BenchmarksClient({ workloads }: Props) {
               </dl>
             </div>
 
-            <div className="rounded-2xl border border-emerald-300/40 bg-gradient-to-br from-emerald-50 to-emerald-100/40 p-6 dark:border-emerald-900/40 dark:from-emerald-950/40 dark:to-emerald-900/20">
+            <div className="rounded-2xl border border-emerald-300/40 bg-emerald-50 p-6 dark:border-emerald-900/40 dark:bg-emerald-950/30">
               <div className="h-eyebrow !text-emerald-600 dark:!text-emerald-400">
                 Coverage edge
               </div>
@@ -160,7 +160,7 @@ export function BenchmarksClient({ workloads }: Props) {
             </div>
 
             <div className="rounded-2xl border border-ink-200/70 bg-white p-6 text-sm text-muted dark:border-ink-800 dark:bg-ink-900/40">
-              <p className="font-mono text-xs uppercase tracking-[0.15em] text-ink-500 dark:text-ink-400">
+              <p className="text-sm font-semibold text-ink-900 dark:text-ink-100">
                 Methodology
               </p>
               <p className="mt-3">
@@ -260,7 +260,7 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
       <div className="font-mono text-base font-bold tabular-nums text-ink-900 dark:text-ink-100">
         {value}
       </div>
-      <div className="text-[10px] font-mono uppercase tracking-wider text-muted">{label}</div>
+      <div className="text-[11px] lowercase text-muted">{label}</div>
       {sub && <div className="text-[10px] text-muted">{sub}</div>}
     </div>
   );

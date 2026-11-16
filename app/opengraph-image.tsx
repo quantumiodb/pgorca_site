@@ -15,7 +15,7 @@ export default async function OpengraphImage() {
           display: "flex",
           flexDirection: "column",
           background:
-            "linear-gradient(135deg, #080a1a 0%, #10142a 45%, #141d4a 100%)",
+            "#336791",
           color: "white",
           padding: "80px",
           fontFamily: "system-ui, sans-serif",
@@ -29,7 +29,7 @@ export default async function OpengraphImage() {
             inset: 0,
             opacity: 0.15,
             backgroundImage:
-              "linear-gradient(rgba(125,132,151,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(125,132,151,0.6) 1px, transparent 1px)",
+              "linear-gradient(rgba(255,255,255,0.35) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.35) 1px, transparent 1px)",
             backgroundSize: "60px 60px",
             display: "flex",
           }}
@@ -44,7 +44,7 @@ export default async function OpengraphImage() {
             width: "500px",
             height: "500px",
             background:
-              "radial-gradient(circle, rgba(249,115,22,0.35) 0%, transparent 60%)",
+              "transparent",
             display: "flex",
           }}
         />
@@ -69,7 +69,8 @@ export default async function OpengraphImage() {
               alignItems: "center",
               justifyContent: "center",
               borderRadius: 10,
-              background: "linear-gradient(135deg, #3563f6 0%, #f97316 100%)",
+              background: "#ffffff",
+              color: "#336791",
               fontSize: 22,
               fontWeight: 800,
             }}
@@ -104,10 +105,7 @@ export default async function OpengraphImage() {
             <span>Plug ORCA into</span>
             <span
               style={{
-                background:
-                  "linear-gradient(135deg, #5b87ff 0%, #f97316 100%)",
-                backgroundClip: "text",
-                color: "transparent",
+                color: "#ffffff",
               }}
             >
               PostgreSQL 18.
@@ -117,7 +115,7 @@ export default async function OpengraphImage() {
           <div
             style={{
               fontSize: "28px",
-              color: "#b1b8c5",
+              color: "#d9e8f2",
               lineHeight: 1.4,
               maxWidth: "900px",
               display: "flex",
@@ -136,9 +134,9 @@ export default async function OpengraphImage() {
             justifyContent: "space-between",
             alignItems: "center",
             paddingTop: "24px",
-            borderTop: "1px solid rgba(255,255,255,0.1)",
+            borderTop: "1px solid rgba(255,255,255,0.3)",
             fontSize: "20px",
-            color: "#7c8597",
+            color: "#b5d1e5",
             fontFamily: "monospace",
             zIndex: 1,
           }}

@@ -19,7 +19,7 @@ export function Honest() {
   return (
     <section className="section border-t border-ink-200/60 bg-ink-50/40 dark:border-ink-800/60 dark:bg-ink-950/60">
       <div className="container-narrow">
-        <div className="mx-auto max-w-2xl text-center">
+        <div className="max-w-2xl">
           <div className="h-eyebrow !text-ink-500 dark:!text-ink-400">Honest</div>
           <h2 className="mt-3 h-section">
             What pg_orca is <span className="text-rose-500">not</span> good at.
@@ -42,7 +42,7 @@ export function Honest() {
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400">
                     <Icon className="size-4" />
-                    <span className="font-mono text-xs uppercase tracking-[0.15em]">
+                    <span className="font-mono text-xs">
                       {l.metric}
                     </span>
                   </div>
@@ -54,7 +54,7 @@ export function Honest() {
           })}
         </div>
 
-        <div className="mx-auto mt-10 flex max-w-3xl items-start gap-4 rounded-2xl border border-emerald-300/50 bg-emerald-50/60 p-6 dark:border-emerald-800/40 dark:bg-emerald-950/30">
+        <div className="mt-10 flex max-w-3xl items-start gap-4 rounded-2xl border border-emerald-300/50 bg-emerald-50/60 p-6 dark:border-emerald-800/40 dark:bg-emerald-950/30">
           <div className="grid size-10 shrink-0 place-items-center rounded-lg bg-emerald-500/20 text-emerald-600 dark:text-emerald-400">
             <ShieldCheck className="size-5" />
           </div>

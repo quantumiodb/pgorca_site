@@ -136,7 +136,7 @@ export default async function PostPage({
                   {post.tags.map((t) => (
                     <span
                       key={t}
-                      className="rounded-full bg-ink-100 px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider text-ink-600 dark:bg-ink-800 dark:text-ink-300"
+                      className="rounded-md bg-ink-100 px-1.5 py-0.5 font-mono text-xs text-ink-600 dark:bg-ink-800 dark:text-ink-300"
                     >
                       {t}
                     </span>
@@ -178,7 +178,7 @@ export default async function PostPage({
           })()}
         </div>
 
-        <div className="mt-16 max-w-3xl rounded-2xl border border-ink-200/60 bg-gradient-to-br from-white to-ink-50 p-8 dark:border-ink-800/60 dark:from-ink-900 dark:to-ink-950">
+        <div className="mt-16 max-w-3xl rounded-2xl border border-ink-200/60 bg-ink-50 p-8 dark:border-ink-800/60 dark:bg-ink-900/60">
           <p className="h-eyebrow">Try it</p>
           <h2 className="mt-2 text-2xl font-bold tracking-tight">
             Install pg_orca in one command

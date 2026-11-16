@@ -1,16 +1,13 @@
 const steps = [
   {
-    n: "01",
     title: "DXL — language between two worlds",
     body: "ORCA was built optimizer-first, database-agnostic. DXL (Data eXchange Language, XML-based) is its IR. pg_orca translates a PostgreSQL Query AST into DXL and the resulting DXL plan back into PG's PlannedStmt.",
   },
   {
-    n: "02",
     title: "Memo + Xforms — cost-based search",
     body: "Plans live in a Memo (Volcano/Cascades-style group structure). Transformation rules (xforms) generate alternatives — join associativity, Apply-to-Join, GROUP BY pushdown, index selection — and the cost model picks a winner over the whole space.",
   },
   {
-    n: "03",
     title: "Failsafe — always returns a plan",
     body: "Anything ORCA can't handle (unsupported feature, internal error, timeout) falls back to PostgreSQL's standard_planner automatically. Set pg_orca.trace_fallback = on to log each fallback with reason.",
   },
@@ -23,7 +20,7 @@ export function Architecture() {
       className="section border-t border-ink-200/60 bg-ink-50/40 dark:border-ink-800/60 dark:bg-ink-950/60"
     >
       <div className="container-narrow">
-        <div className="mx-auto max-w-2xl text-center">
+        <div className="max-w-2xl">
           <div className="h-eyebrow">Architecture</div>
           <h2 className="mt-3 h-section">
             Architecture: how pg_orca turns a query into a plan.
@@ -39,14 +36,10 @@ export function Architecture() {
           <FlowDiagram />
         </div>
 
-        <div className="mt-10 grid gap-6 md:grid-cols-3">
+        <div className="mt-10 grid gap-x-10 gap-y-8 md:grid-cols-3">
           {steps.map((s) => (
-            <div
-              key={s.n}
-              className="rounded-2xl border border-ink-200/70 bg-white p-6 dark:border-ink-800 dark:bg-ink-900/40"
-            >
-              <div className="font-mono text-xs text-accent-500">{s.n}</div>
-              <h3 className="mt-2 text-lg font-semibold">{s.title}</h3>
+            <div key={s.title} className="border-t-2 border-brand-500 pt-5">
+              <h3 className="text-lg font-semibold leading-snug">{s.title}</h3>
               <p className="mt-3 text-sm leading-relaxed text-muted">{s.body}</p>
             </div>
           ))}
@@ -66,12 +59,12 @@ function FlowDiagram() {
     >
       <defs>
         <linearGradient id="grad-brand" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stopColor="#5b87ff" />
-          <stop offset="100%" stopColor="#3563f6" />
+          <stop offset="0%" stopColor="#336791" />
+          <stop offset="100%" stopColor="#336791" />
         </linearGradient>
         <linearGradient id="grad-accent" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stopColor="#fb923c" />
-          <stop offset="100%" stopColor="#f97316" />
+          <stop offset="0%" stopColor="#12222f" />
+          <stop offset="100%" stopColor="#12222f" />
         </linearGradient>
         <marker
           id="arrow"
@@ -101,7 +94,7 @@ function FlowDiagram() {
       {/* Middle: Memo + Cost */}
       <Node x={520} y={150} w={140} h={56} label="Memo" sub="groups + cost" tone="accent" dashed />
       <Node x={690} y={150} w={170} h={56} label="Statistics" sub="histograms · NDV · MCV" tone="accent" dashed />
-      <Arrow x1={605} y1={178} x2={690} y2={178} bidi />
+      <Arrow x1={660} y1={178} x2={690} y2={178} bidi />
 
       {/* Bottom row */}
       <Arrow x1={520} y1={178} x2={420} y2={178} />
@@ -119,13 +112,14 @@ function FlowDiagram() {
       {/* Fallback arrow */}
       <g opacity="0.7">
         <path
-          d="M 280 96 Q 280 130 105 200 Q 50 220 50 230"
+          d="M 230 96 V 123 H 8 V 250 H 20"
           stroke="currentColor"
           strokeDasharray="4 4"
           fill="none"
+          markerEnd="url(#arrow)"
           className="text-rose-400"
         />
-        <text x="280" y="125" className="fill-rose-500 dark:fill-rose-400" fontSize="10" fontFamily="monospace">
+        <text x="20" y="116" className="fill-rose-500 dark:fill-rose-400" fontSize="10" fontFamily="monospace">
           on failure: standard_planner
         </text>
       </g>
@@ -167,9 +161,9 @@ function Node({
         y={y}
         width={w}
         height={h}
-        rx={10}
+        rx={3}
         fill={fill}
-        stroke={tone === "ink" ? "currentColor" : "none"}
+        stroke={tone === "ink" ? "currentColor" : tone === "accent" ? "#6aa3cc" : "none"}
         className={tone === "ink" ? "text-ink-300 dark:text-ink-700" : ""}
         strokeWidth={1.5}
         strokeDasharray={dashed ? "4 3" : undefined}

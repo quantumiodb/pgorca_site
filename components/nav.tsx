@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Github } from "lucide-react";
+import { Github, Menu, X } from "lucide-react";
+import { useEffect, useState } from "react";
 import { ThemeToggle } from "./theme-toggle";
 import { site } from "@/lib/site";
 
@@ -18,12 +19,18 @@ const homeLinks = [
 export function Nav() {
   const pathname = usePathname();
   const isHome = pathname === "/";
+  const [open, setOpen] = useState(false);
+
+  // Close the mobile menu whenever the route changes.
+  useEffect(() => setOpen(false), [pathname]);
+
+  const mobileLinks = [...homeLinks, { href: "/demo", label: "Demo" }, { href: "/blog", label: "Blog" }];
 
   return (
-    <header className="sticky top-0 z-50 border-b border-ink-200/60 bg-white/80 backdrop-blur dark:border-ink-800/60 dark:bg-ink-950/80">
-      <div className="container-narrow flex h-16 items-center justify-between">
+    <header className="sticky top-0 z-50 border-b border-brand-700 bg-brand-500 text-white dark:border-ink-800 dark:bg-brand-900">
+      <div className="container-narrow flex h-14 items-center justify-between">
         <Link href="/" className="flex items-center gap-2 font-mono text-sm font-bold tracking-tight">
-          <span className="grid size-7 place-items-center rounded-md bg-gradient-to-br from-brand-500 to-accent-500 text-xs text-white">
+          <span className="grid size-7 place-items-center rounded-md bg-white text-xs text-brand-500">
             pg
           </span>
           <span>pg_orca</span>
@@ -35,7 +42,7 @@ export function Nav() {
               <Link
                 key={l.href}
                 href={l.href}
-                className="rounded-md px-3 py-1.5 text-sm text-ink-600 transition hover:bg-ink-100 hover:text-ink-900 dark:text-ink-300 dark:hover:bg-ink-800 dark:hover:text-white"
+                className="rounded-md px-3 py-1.5 text-sm transition text-white/80 hover:bg-white/10 hover:text-white"
               >
                 {l.label}
               </Link>
@@ -44,8 +51,8 @@ export function Nav() {
             href="/demo"
             className={`rounded-md px-3 py-1.5 text-sm transition ${
               pathname.startsWith("/demo")
-                ? "bg-ink-100 text-ink-900 dark:bg-ink-800 dark:text-white"
-                : "text-ink-600 hover:bg-ink-100 hover:text-ink-900 dark:text-ink-300 dark:hover:bg-ink-800 dark:hover:text-white"
+                ? "bg-white/15 text-white"
+                : "text-white/80 hover:bg-white/10 hover:text-white"
             }`}
           >
             Demo
@@ -54,8 +61,8 @@ export function Nav() {
             href="/blog"
             className={`rounded-md px-3 py-1.5 text-sm transition ${
               pathname.startsWith("/blog")
-                ? "bg-ink-100 text-ink-900 dark:bg-ink-800 dark:text-white"
-                : "text-ink-600 hover:bg-ink-100 hover:text-ink-900 dark:text-ink-300 dark:hover:bg-ink-800 dark:hover:text-white"
+                ? "bg-white/15 text-white"
+                : "text-white/80 hover:bg-white/10 hover:text-white"
             }`}
           >
             Blog
@@ -69,12 +76,40 @@ export function Nav() {
             target="_blank"
             rel="noopener noreferrer"
             aria-label="GitHub"
-            className="grid size-9 place-items-center rounded-md border border-ink-200 bg-white text-ink-700 transition hover:border-ink-300 dark:border-ink-700 dark:bg-ink-900 dark:text-ink-100 dark:hover:border-ink-600"
+            className="grid size-9 place-items-center rounded-md border border-white/25 text-white transition hover:bg-white/10"
           >
             <Github className="size-4" />
           </a>
+          <button
+            type="button"
+            aria-label={open ? "Close menu" : "Open menu"}
+            aria-expanded={open}
+            aria-controls="mobile-nav"
+            onClick={() => setOpen((v) => !v)}
+            className="grid size-9 place-items-center rounded-md border border-white/25 text-white transition hover:bg-white/10 md:hidden"
+          >
+            {open ? <X className="size-4" /> : <Menu className="size-4" />}
+          </button>
         </div>
       </div>
+
+      {open && (
+        <nav id="mobile-nav" className="border-t border-white/15 md:hidden">
+          <ul className="container-narrow grid grid-cols-2 gap-x-4 py-3">
+            {mobileLinks.map((l) => (
+              <li key={l.href}>
+                <Link
+                  href={l.href}
+                  onClick={() => setOpen(false)}
+                  className="block rounded-md px-2 py-2.5 text-sm text-white/90 hover:bg-white/10 hover:text-white"
+                >
+                  {l.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      )}
     </header>
   );
 }

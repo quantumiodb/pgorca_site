@@ -71,7 +71,7 @@ export default function BlogIndexPage() {
                           {p.tags.slice(0, 3).map((t) => (
                             <span
                               key={t}
-                              className="rounded-full bg-ink-100 px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider text-ink-600 dark:bg-ink-800 dark:text-ink-300"
+                              className="rounded-md bg-ink-100 px-1.5 py-0.5 font-mono text-xs text-ink-600 dark:bg-ink-800 dark:text-ink-300"
                             >
                               {t}
                             </span>

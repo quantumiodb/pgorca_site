@@ -43,7 +43,7 @@ export function Footer() {
         <div className="grid gap-10 md:grid-cols-4">
           <div>
             <Link href="/" className="flex items-center gap-2 font-mono text-sm font-bold">
-              <span className="grid size-7 place-items-center rounded-md bg-gradient-to-br from-brand-500 to-accent-500 text-xs text-white">
+              <span className="grid size-7 place-items-center rounded-md bg-brand-500 text-xs text-white">
                 pg
               </span>
               <span>pg_orca</span>
@@ -70,7 +70,7 @@ export function Footer() {
           </div>
           {cols.map((c) => (
             <div key={c.title}>
-              <h3 className="text-xs font-mono uppercase tracking-[0.15em] text-ink-500 dark:text-ink-400">
+              <h3 className="text-sm font-semibold text-brand-600 dark:text-brand-300">
                 {c.title}
               </h3>
               <ul className="mt-3 space-y-2">
