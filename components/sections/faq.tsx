@@ -16,7 +16,7 @@ const faqs = [
   },
   {
     q: "Which PostgreSQL versions are supported?",
-    a: "PostgreSQL 18 and 19-devel. The extension targets PG 18's planner / executor API and tracks the in-development PG 19 branch via PG_VERSION_NUM guards (rockylinux:9 + PG19 build/test runs in CI). Earlier versions removed walkers.h and other internals that pg_orca depends on, and were not back-ported.",
+    a: "PostgreSQL 18 and 19. The extension supports both PG 18 and PG 19 planner / executor APIs via PG_VERSION_NUM guards (rockylinux:9 + PG19 build/test runs in CI). Earlier versions removed walkers.h and other internals that pg_orca depends on, and were not back-ported.",
   },
   {
     q: "Is this production-ready?",

@@ -49,7 +49,7 @@ export function Why() {
           </h2>
           <p className="mt-4 text-lg text-muted">
             ORCA was built at Greenplum for exactly this class of problem. pg_orca brings
-            that engine to single-node PostgreSQL 18 &amp; 19-devel — without replacing the
+            that engine to single-node PostgreSQL 18 &amp; 19 — without replacing the
             planner you already have.
           </p>
         </div>

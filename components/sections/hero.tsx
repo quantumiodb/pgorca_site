@@ -73,12 +73,12 @@ export function Hero() {
       <div className="container-narrow grid items-start gap-12 lg:grid-cols-[1fr_1.15fr]">
         <div className="min-w-0">
           <h1 className="h-display">
-            Plug ORCA into PostgreSQL 18 &amp; 19-devel.
+            Plug ORCA into PostgreSQL 18 &amp; 19.
           </h1>
 
           <p className="mt-6 max-w-xl text-lg leading-relaxed text-muted">
             <strong className="text-ink-900 dark:text-ink-100">pg_orca</strong> is a
-            PostgreSQL 18 &amp; 19-devel extension that swaps in the ORCA cost-based query
+            PostgreSQL 18 &amp; 19 extension that swaps in the ORCA cost-based query
             optimizer from Greenplum / Apache Cloudberry — exhaustive join enumeration,
             correlated subquery decorrelation, and dynamic partition pruning. Installed
             with a single{" "}
@@ -108,7 +108,7 @@ export function Hero() {
 
           <ul className="mt-8 space-y-1.5 text-sm text-muted">
             <li>MIT-style license</li>
-            <li>PostgreSQL 18 &amp; 19-devel, macOS &amp; Linux</li>
+            <li>PostgreSQL 18 &amp; 19, macOS &amp; Linux</li>
             <li>Falls back to the standard planner on unsupported queries</li>
           </ul>
         </div>
